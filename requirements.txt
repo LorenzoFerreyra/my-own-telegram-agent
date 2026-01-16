@@ -1,0 +1,7 @@
+fastapi
+mangum
+uvicorn
+gspread
+langchain-openai
+langgraph
+python-dotenv
