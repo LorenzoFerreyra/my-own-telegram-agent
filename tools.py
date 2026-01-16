@@ -17,42 +17,29 @@ def get_gspread_client():
         'https://www.googleapis.com/auth/drive'
     ]
     creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if not creds_file:
-        raise Exception("GOOGLE_APPLICATION_CREDENTIALS not set!")
-    
-    # Use absolute path if relative
-    if not os.path.isabs(creds_file):
-        creds_file = os.path.join(os.path.dirname(__file__), creds_file)
-    
-    if not os.path.exists(creds_file):
-        raise Exception(f"Credentials file not found: {creds_file}")
-    
     creds = Credentials.from_service_account_file(creds_file, scopes=scopes)
     return gspread.authorize(creds)
 
 
 @tool
-def add_expense(amount: float, description: str, category: str, payment_method: str = "efectivo") -> str:
+def add_expense(amount: float, description: str, category: str, payment_method: str = "Efectivo") -> str:
     """Add an expense to EntradaMaterial sheet.
     
     Args:
         amount: The amount spent (positive number)
         description: What the expense was for
-        category: One of {categories}
-        payment_method: One of {methods}
+        category: Category from your sheet (e.g., Alimentación, Transporte, Vivienda, etc.)
+        payment_method: Payment method from your sheet (e.g., Efectivo, Tarjeta de crédito, Transferencia, etc.)
     
     Returns:
         Confirmation message
-    """.format(
-        categories=", ".join(ENTRADA_CATEGORIES),
-        methods=", ".join(ENTRADA_PAYMENT_METHODS)
-    )
+    """
     
     # Validate
     if category not in ENTRADA_CATEGORIES:
-        return f"❌ Categoría '{category}' no válida. Usa: {', '.join(ENTRADA_CATEGORIES)}"
+        return f"Categoría '{category}' no válida. Usa: {', '.join(ENTRADA_CATEGORIES)}"
     if payment_method not in ENTRADA_PAYMENT_METHODS:
-        return f"❌ Método '{payment_method}' no válido. Usa: {', '.join(ENTRADA_PAYMENT_METHODS)}"
+        return f"Método '{payment_method}' no válido. Usa: {', '.join(ENTRADA_PAYMENT_METHODS)}"
     
     try:
         client = get_gspread_client()
@@ -77,23 +64,20 @@ def add_expense(amount: float, description: str, category: str, payment_method: 
 
 
 @tool
-def add_income(amount: float, description: str, category: str, payment_method: str = "efectivo") -> str:
+def add_income(amount: float, description: str, category: str, payment_method: str = "Efectivo") -> str:
     """Add income to Ventas sheet.
     
     Args:
         amount: The amount received (positive number)
         description: What the income was for
-        category: One of {categories}
-        payment_method: One of {methods}
+        category: Category from your sheet (e.g., Salario, Freelance, Emprendimiento, etc.)
+        payment_method: Payment method from your sheet (e.g., Efectivo, Tarjeta de débito, Transferencia, etc.)
     
     Returns:
         Confirmation message
-    """.format(
-        categories=", ".join(VENTAS_CATEGORIES),
-        methods=", ".join(VENTAS_PAYMENT_METHODS)
-    )
+    """
     
-
+    # Validate
     if category not in VENTAS_CATEGORIES:
         return f"Categoría '{category}' no válida. Usa: {', '.join(VENTAS_CATEGORIES)}"
     if payment_method not in VENTAS_PAYMENT_METHODS:
@@ -116,6 +100,6 @@ def add_income(amount: float, description: str, category: str, payment_method: s
             category
         ]
         worksheet.append_row(row)
-        return f"✅ Ingreso registrado: ${amount} de {description} ({category})"
+        return f"Ingreso registrado: ${amount} de {description} ({category})"
     except Exception as e:
         return f"Error: {str(e)}"
