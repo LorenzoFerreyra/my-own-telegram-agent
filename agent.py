@@ -22,10 +22,9 @@ llm_with_tools = llm.bind_tools(tools)
 def call_model(state: AgentState):
     """Node that calls the OpenAI model with the conversation history"""
     
-    # Add system message if this is the first message
     messages = list(state["messages"])
-    if len(messages) == 1:  # Only user message exists
-        system_msg = SystemMessage(content="""You are a helpful personal finance assistant. 
+    if len(messages) == 1:
+        system_msg = SystemMessage(content="""You are a Spanish helpful personal finance assistant. 
         You help users track their expenses and income by recording them in a Google Sheet.
         
         When users mention spending money, use the add_expense tool.
@@ -34,7 +33,7 @@ def call_model(state: AgentState):
         Be friendly and confirm what you've recorded. Ask for clarification if needed.""")
         messages = [system_msg] + messages
     
-    # Call the model
+    
     response = llm_with_tools.invoke(messages)
     
     return {"messages": [response]}
@@ -43,27 +42,26 @@ def should_continue(state: AgentState):
     """Decide if we should use tools or end"""
     last_message = state["messages"][-1]
     
-    # If there are tool calls, continue to tools
+    
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
     
-    # Otherwise, end
+    
     return "end"
 
 def build_graph():
     """Build the LangGraph workflow"""
     
-    # Create the graph
+    
     workflow = StateGraph(AgentState)
     
-    # Add nodes
+    
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", ToolNode(tools))
     
-    # Set entry point
+    
     workflow.set_entry_point("agent")
     
-    # Add conditional edges
     workflow.add_conditional_edges(
         "agent",
         should_continue,
@@ -73,7 +71,6 @@ def build_graph():
         }
     )
     
-    # After using tools, go back to agent
     workflow.add_edge("tools", "agent")
     
     return workflow.compile()
