@@ -72,7 +72,29 @@ def build_graph():
             "end": END
         }
     )
-    
+    workflow.add_conditional_edges(
+        "tools",
+        should_generate_report,
+        {
+            "generate_report": "generate_report",
+            "agent": "agent"
+        }
+    )
+    workflow.add_edge("tools", "generate_report")
     workflow.add_edge("tools", "agent")
     
     return workflow.compile()
+
+def generate_report(state: AgentState):
+    """Node to automatically generate the monthly report after add_expense or add_income"""
+    report = generate_monthly_report.invoke({})
+    return {"messages": [report]}
+
+def should_generate_report(state: AgentState):
+    """Check if the last tool was add_expense or add_income to trigger report"""
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        tool_name = last_message.tool_calls[0]["name"]
+        if tool_name in ["add_expense", "add_income"]:
+            return "generate_report"
+    return "agent"

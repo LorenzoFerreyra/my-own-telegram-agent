@@ -118,8 +118,6 @@ def generate_monthly_report() -> str:
     Returns:
         A string message with the balance summary.
     """
-    current_month = datetime.now().strftime("%Y-%m")
-    
     try:
         client = get_gspread_client()
         spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
@@ -129,10 +127,13 @@ def generate_monthly_report() -> str:
         df_ventas = pd.DataFrame(ventas_data)
         if not df_ventas.empty:
             df_ventas["Monto"] = pd.to_numeric(df_ventas["Monto"], errors="coerce")
-            total_income = df_ventas[
-                (df_ventas["VentaFecha"].str.startswith(current_month, na=False)) &
+            df_ventas["VentaFecha"] = pd.to_datetime(df_ventas["VentaFecha"], format="%d/%m/%Y", errors="coerce")
+            filtered_ventas = df_ventas[
+                (df_ventas["VentaFecha"].dt.year == datetime.now().year) &
+                (df_ventas["VentaFecha"].dt.month == datetime.now().month) &
                 (df_ventas["UsuarioID"].isin(["16162b8f", "3075a55c"]))
-            ]["Monto"].sum()
+            ]
+            total_income = filtered_ventas["Monto"].sum()
         else:
             total_income = 0.0
         
@@ -141,10 +142,13 @@ def generate_monthly_report() -> str:
         df_gastos = pd.DataFrame(gastos_data)
         if not df_gastos.empty:
             df_gastos["Monto"] = pd.to_numeric(df_gastos["Monto"], errors="coerce")
-            total_expenses = df_gastos[
-                (df_gastos["EntradaMaterialFecha"].str.startswith(current_month, na=False)) &
+            df_gastos["EntradaMaterialFecha"] = pd.to_datetime(df_gastos["EntradaMaterialFecha"], format="%d/%m/%Y", errors="coerce")
+            filtered_gastos = df_gastos[
+                (df_gastos["EntradaMaterialFecha"].dt.year == datetime.now().year) &
+                (df_gastos["EntradaMaterialFecha"].dt.month == datetime.now().month) &
                 (df_gastos["UsuarioID"].isin(["16162b8f", "3075a55c"]))
-            ]["Monto"].sum()
+            ]
+            total_expenses = filtered_gastos["Monto"].sum()
         else:
             total_expenses = 0.0
         
