@@ -127,14 +127,14 @@ def generate_monthly_report() -> str:
         ventas_records = ventas_sheet.get_all_records()
         total_income = sum(
             float(record["Monto"]) for record in ventas_records
-            if record["VentaFecha"].startswith(current_month) and record["VentaStatus"] == "TRUE"
+            if record["VentaFecha"] == current_month
         )
         
         gastos_sheet = spreadsheet.worksheet("EntradaMaterial")
         gastos_records = gastos_sheet.get_all_records()
         total_expenses = sum(
             float(record["Monto"]) for record in gastos_records
-            if record["EntradaMaterialFecha"].startswith(current_month) and record["EntradaMaterialStatus"] == "TRUE"
+            if record["EntradaMaterialFecha"] == current_month
         )
         
         balance = total_income - total_expenses
