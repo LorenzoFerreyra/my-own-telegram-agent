@@ -1,11 +1,13 @@
+"""Telegram agent module for personal finance assistance."""
+
+import os
+from dotenv import load_dotenv
+from langchain_core.messages import SystemMessage
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from models import AgentState
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
-from tools import add_expense, add_income
-import os
-from dotenv import load_dotenv
+from tools import add_expense, add_income, generate_monthly_report
 
 load_dotenv()
 
@@ -16,7 +18,7 @@ llm = ChatOpenAI(
 )
 
 
-tools = [add_expense, add_income]
+tools = [add_expense, add_income, generate_monthly_report]
 llm_with_tools = llm.bind_tools(tools)
 
 def call_model(state: AgentState):

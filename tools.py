@@ -1,11 +1,18 @@
+"""Module for Telegram agent tools, including expense and income management via Google Sheets."""
+
+import os
+from datetime import datetime
+import uuid
 from langchain_core.tools import tool
 import gspread
 from google.oauth2.service_account import Credentials
-import os
-from datetime import datetime
 from dotenv import load_dotenv
-import uuid
-from config import ENTRADA_CATEGORIES, ENTRADA_PAYMENT_METHODS, VENTAS_CATEGORIES, VENTAS_PAYMENT_METHODS
+from config import (
+    ENTRADA_CATEGORIES,
+    ENTRADA_PAYMENT_METHODS,
+    VENTAS_CATEGORIES,
+    VENTAS_PAYMENT_METHODS,
+)
 
 load_dotenv()
 
@@ -35,7 +42,6 @@ def add_expense(amount: float, description: str, category: str, payment_method: 
         Confirmation message
     """
     
-    # Validate
     if category not in ENTRADA_CATEGORIES:
         return f"Categoría '{category}' no válida. Usa: {', '.join(ENTRADA_CATEGORIES)}"
     if payment_method not in ENTRADA_PAYMENT_METHODS:
@@ -58,7 +64,7 @@ def add_expense(amount: float, description: str, category: str, payment_method: 
             payment_method
         ]
         worksheet.append_row(row)
-        return f"Gasto registrado: ${amount} en {description} ({category})"
+        return f"Gasto registrado: ${amount} en {description} ({category}) por el bot"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -100,6 +106,44 @@ def add_income(amount: float, description: str, category: str, payment_method: s
             category
         ]
         worksheet.append_row(row)
-        return f"Ingreso registrado: ${amount} de {description} ({category})"
+        return f"Ingreso registrado: ${amount} de {description} ({category}) por el bot"
     except Exception as e:
         return f"Error: {str(e)}"
+
+@tool
+def generate_monthly_report() -> str:
+    """Generate a monthly balance report: total income minus total expenses for the current month.
+    
+    Returns:
+        A string message with the balance summary.
+    """
+    current_month = datetime.now().strftime("%Y-%m")
+    
+    try:
+        client = get_gspread_client()
+        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+
+        ventas_sheet = spreadsheet.worksheet("Ventas")
+        ventas_records = ventas_sheet.get_all_records()
+        total_income = sum(
+            float(record["Monto"]) for record in ventas_records
+            if record["VentaFecha"].startswith(current_month) and record["VentaStatus"] == "TRUE"
+        )
+        
+        gastos_sheet = spreadsheet.worksheet("EntradaMaterial")
+        gastos_records = gastos_sheet.get_all_records()
+        total_expenses = sum(
+            float(record["Monto"]) for record in gastos_records
+            if record["EntradaMaterialFecha"].startswith(current_month) and record["EntradaMaterialStatus"] == "TRUE"
+        )
+        
+        balance = total_income - total_expenses
+        message = (
+            f"Este mes tuvimos\n:"
+            f"Ingresos totales: ${total_income:.2f}\n"
+            f"Gastos totales: ${total_expenses:.2f}\n"
+            f"Balance: ${balance:.2f}"
+        )
+        return message
+    except Exception as e:
+        return f"Error generando reporte: {str(e)}"
