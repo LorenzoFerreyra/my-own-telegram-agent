@@ -5,3 +5,4 @@ gspread
 langchain-openai
 langgraph
 python-dotenv
+pandas

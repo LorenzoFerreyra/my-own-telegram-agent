@@ -5,6 +5,7 @@ from datetime import datetime
 import uuid
 from langchain_core.tools import tool
 import gspread
+import pandas as pd
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from config import (
@@ -122,24 +123,34 @@ def generate_monthly_report() -> str:
     try:
         client = get_gspread_client()
         spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
-
+        
         ventas_sheet = spreadsheet.worksheet("Ventas")
-        ventas_records = ventas_sheet.get_all_records()
-        total_income = sum(
-            float(record["Monto"]) for record in ventas_records
-            if record["VentaFecha"] == current_month
-        )
+        ventas_data = ventas_sheet.get_all_records()
+        df_ventas = pd.DataFrame(ventas_data)
+        if not df_ventas.empty:
+            df_ventas["Monto"] = pd.to_numeric(df_ventas["Monto"], errors="coerce")
+            total_income = df_ventas[
+                (df_ventas["VentaFecha"].str.startswith(current_month, na=False)) &
+                (df_ventas["UsuarioID"].isin(["16162b8f", "3075a55c"]))
+            ]["Monto"].sum()
+        else:
+            total_income = 0.0
         
         gastos_sheet = spreadsheet.worksheet("EntradaMaterial")
-        gastos_records = gastos_sheet.get_all_records()
-        total_expenses = sum(
-            float(record["Monto"]) for record in gastos_records
-            if record["EntradaMaterialFecha"] == current_month
-        )
+        gastos_data = gastos_sheet.get_all_records()
+        df_gastos = pd.DataFrame(gastos_data)
+        if not df_gastos.empty:
+            df_gastos["Monto"] = pd.to_numeric(df_gastos["Monto"], errors="coerce")
+            total_expenses = df_gastos[
+                (df_gastos["EntradaMaterialFecha"].str.startswith(current_month, na=False)) &
+                (df_gastos["UsuarioID"].isin(["16162b8f", "3075a55c"]))
+            ]["Monto"].sum()
+        else:
+            total_expenses = 0.0
         
         balance = total_income - total_expenses
         message = (
-            f"Este mes tuvimos\n:"
+            f"Este mes tuvimos:\n"
             f"Ingresos totales: ${total_income:.2f}\n"
             f"Gastos totales: ${total_expenses:.2f}\n"
             f"Balance: ${balance:.2f}"
