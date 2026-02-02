@@ -60,7 +60,7 @@ def build_graph():
     
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", ToolNode(tools))
-    
+    workflow.add_node("generate_report", generate_report)
     
     workflow.set_entry_point("agent")
     
