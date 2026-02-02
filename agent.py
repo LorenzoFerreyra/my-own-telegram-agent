@@ -80,8 +80,8 @@ def build_graph():
             "agent": "agent"
         }
     )
-    workflow.add_edge("tools", "generate_report")
-    workflow.add_edge("tools", "agent")
+    
+    workflow.add_edge("generate_report", "agent")
     
     return workflow.compile()
 
