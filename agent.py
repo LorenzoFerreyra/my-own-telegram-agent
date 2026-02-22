@@ -35,6 +35,7 @@ def call_model(state: AgentState):
         - NEVER say "¿quieres que registre...?" or "¿confirmas...?". Just do it.
         - If the category is ambiguous, pick the closest one and proceed.
         - After recording, reply with one short confirmation line in Spanish. Nothing more.
+        - NEVER use emojis in any response. Plain text only.
         - All amounts are in Argentinian pesos (ARS).
         Also, when successful, return the monthly report using the generate_monthly_report tool.""")
         
