@@ -94,9 +94,23 @@ done
 
 > First time only: `chmod +x start_bot.sh` to make it executable.
 
+### Option B: Headless Windows launcher (no terminal window)
+
+If you don't want any terminal window showing up at all, use `start_bot.vbs` instead.
+It launches Ollama and the bot completely silently, and auto-restarts on crash.
+
+**How it works:**
+1. Starts `ollama serve` hidden in the background
+2. Waits 3 seconds for Ollama to be ready
+3. Runs the bot in a loop — no visible window, logs go to `bot_log.txt`
+
+**Usage:** just double-click `start_bot.vbs`, or register it as a scheduled task (see below).
+
+> To monitor the bot while headless: `Get-Content bot_log.txt -Wait` in PowerShell.
+
 ### Run on Windows startup (optional)
 
-Run once in PowerShell to register it as a scheduled task at login:
+**Option A — Shell script via scheduled task:**
 
 ```powershell
 $action = New-ScheduledTaskAction `
@@ -109,6 +123,28 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn
 Register-ScheduledTask -TaskName "TelegramFinanceBot" -Action $action -Trigger $trigger -RunLevel Highest
 ```
 
+**Option B — VBS launcher (fully headless, recommended for Windows):**
+
+Run once in **admin** PowerShell — starts at login, no windows ever:
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"C:\Users\Lorenzo\Documents\Desktop project versions\my-own-telegram-agent\start_bot.vbs`""
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 99 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName "TelegramBot" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force
+```
+
+Start it immediately without rebooting:
+```powershell
+Start-ScheduledTask -TaskName "TelegramBot"
+```
+
+Stop or remove it:
+```powershell
+Stop-ScheduledTask -TaskName "TelegramBot"
+Unregister-ScheduledTask -TaskName "TelegramBot" -Confirm:$false
+```
+
 ## Project structure
 
 ```
@@ -119,6 +155,7 @@ Register-ScheduledTask -TaskName "TelegramFinanceBot" -Action $action -Trigger $
 ├── models.py        # Pydantic models and AgentState
 ├── config.py        # Valid categories and payment methods from the sheet
 ├── start_bot.sh     # Git Bash launcher with auto-restart
+├── start_bot.vbs    # Headless Windows launcher — no terminal window, auto-restarts
 └── .env             # Secrets — never commit this
 ```
 
