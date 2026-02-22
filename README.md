@@ -31,21 +31,28 @@ Tested on:
 
 Minimum: any machine with ~3GB VRAM or 8GB RAM for CPU inference.
 
-## Setup
+## Prerequisites
 
-### 1. Install and start Ollama
+### Ollama
+Install Ollama from [https://ollama.com](https://ollama.com) using the official Windows installer.
+
+- The installer registers Ollama as a **Windows background service** that starts automatically at boot
+- No need to open the desktop app or run `ollama serve` manually — it's already running
+- Verify it's up at any time: `http://localhost:11434` should return `Ollama is running`
+
 ```bash
-# Download from https://ollama.com
-ollama serve
+# Pull the model once after installing
 ollama pull qwen3:4b
 ```
 
-### 2. Install Python dependencies
+## Setup
+
+### 1. Install Python dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure environment variables
+### 2. Configure environment variables
 Create a `.env` file in the project root:
 ```env
 HTTP_TELEGRAM_TOKEN=your_telegram_bot_token
@@ -56,7 +63,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 > `OLLAMA_BASE_URL` defaults to `http://localhost:11434` if omitted.
 
-### 4. Share your Google Sheet
+### 3. Share your Google Sheet
 Share the spreadsheet with the service account email from your credentials JSON file (Editor access).
 
 ## Run
@@ -67,6 +74,41 @@ python main.py
 
 No server, no public URL, no ngrok needed. The bot polls Telegram directly.
 
+### Run with auto-restart (recommended)
+
+Using **Git Bash** (preferred):
+```bash
+bash start_bot.sh
+```
+
+The script loops forever and restarts the bot automatically if it crashes:
+```bash
+#!/bin/bash
+cd "$(dirname "$0")"
+while true; do
+    .venv/Scripts/python.exe main.py
+    echo "Bot crashed, restarting in 5 seconds..."
+    sleep 5
+done
+```
+
+> First time only: `chmod +x start_bot.sh` to make it executable.
+
+### Run on Windows startup (optional)
+
+Run once in PowerShell to register it as a scheduled task at login:
+
+```powershell
+$action = New-ScheduledTaskAction `
+    -Execute "C:\Users\Lorenzo\Documents\Desktop project versions\my-own-telegram-agent\.venv\Scripts\python.exe" `
+    -Argument "start_bot.sh" `
+    -WorkingDirectory "C:\Users\Lorenzo\Documents\Desktop project versions\my-own-telegram-agent"
+
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+
+Register-ScheduledTask -TaskName "TelegramFinanceBot" -Action $action -Trigger $trigger -RunLevel Highest
+```
+
 ## Project structure
 
 ```
@@ -76,6 +118,7 @@ No server, no public URL, no ngrok needed. The bot polls Telegram directly.
 ├── database.py      # SQLite helpers — conversation history + dedup
 ├── models.py        # Pydantic models and AgentState
 ├── config.py        # Valid categories and payment methods from the sheet
+├── start_bot.sh     # Git Bash launcher with auto-restart
 └── .env             # Secrets — never commit this
 ```
 
@@ -94,4 +137,4 @@ A local `processed_updates.db` SQLite file is created automatically on first run
 - Qwen3 thinking tokens (`<think>...</think>`) are stripped before replying
 - Conversation context is loaded from SQLite on every message, so the bot remembers previous turns even after a restart
 - Categories and payment methods are validated against the values in `config.py`
-
+- Ollama runs as a Windows background service — no desktop app required
