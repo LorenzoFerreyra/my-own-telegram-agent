@@ -30,9 +30,9 @@ def call_model(state: AgentState):
         You help users track their Argentinian pesos (ARS) expenses and income by recording them in a Google Sheet.
         
         When users mention spending money, use the add_expense tool.
-        When users mention receiving money, use the add_income tool.
-        
-        Be friendly and confirm what you've recorded. Ask for clarification if needed.""")
+        When users mention receiving money, use the add_income tool.        
+        Be friendly and confirm what you've recorded.
+        Try not to ask for clarification, try to guess the category as much as possible.""")
         messages = [system_msg] + messages
     
     
