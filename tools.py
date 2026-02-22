@@ -2,7 +2,10 @@
 
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import uuid
+
+ARGENTINA = ZoneInfo("America/Argentina/Buenos_Aires")
 from langchain_core.tools import tool
 import gspread
 import pandas as pd
@@ -78,8 +81,8 @@ def add_expense(amount: float, description: str, category: str, payment_method: 
         
         row = [
             uuid.uuid4().hex[:8],
-            datetime.now().strftime("%Y-%m-%d"),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.now(ARGENTINA).strftime("%Y-%m-%d"),
+            datetime.now(ARGENTINA).strftime("%Y-%m-%d %H:%M:%S"),
             "16162b8f",
             "TRUE",
             abs(amount),
@@ -123,8 +126,8 @@ def add_income(amount: float, description: str, category: str, payment_method: s
         
         row = [
             uuid.uuid4().hex[:8],
-            datetime.now().strftime("%Y-%m-%d"),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.now(ARGENTINA).strftime("%Y-%m-%d"),
+            datetime.now(ARGENTINA).strftime("%Y-%m-%d %H:%M:%S"),
             "16162b8f",
             payment_method,
             "TRUE",
@@ -155,8 +158,8 @@ def generate_monthly_report() -> str:
             df_ventas["Monto"] = pd.to_numeric(df_ventas["Monto"], errors="coerce")
             df_ventas["VentaFecha"] = pd.to_datetime(df_ventas["VentaFecha"], format="%d/%m/%Y", errors="coerce")
             filtered_ventas = df_ventas[
-                (df_ventas["VentaFecha"].dt.year == datetime.now().year) &
-                (df_ventas["VentaFecha"].dt.month == datetime.now().month) &
+                (df_ventas["VentaFecha"].dt.year == datetime.now(ARGENTINA).year) &
+                (df_ventas["VentaFecha"].dt.month == datetime.now(ARGENTINA).month) &
                 (df_ventas["UsuarioID"].isin(["16162b8f", "3075a55c"]))
             ]
             total_income = filtered_ventas["Monto"].sum()
@@ -170,8 +173,8 @@ def generate_monthly_report() -> str:
             df_gastos["Monto"] = pd.to_numeric(df_gastos["Monto"], errors="coerce")
             df_gastos["EntradaMaterialFecha"] = pd.to_datetime(df_gastos["EntradaMaterialFecha"], format="%d/%m/%Y", errors="coerce")
             filtered_gastos = df_gastos[
-                (df_gastos["EntradaMaterialFecha"].dt.year == datetime.now().year) &
-                (df_gastos["EntradaMaterialFecha"].dt.month == datetime.now().month) &
+                (df_gastos["EntradaMaterialFecha"].dt.year == datetime.now(ARGENTINA).year) &
+                (df_gastos["EntradaMaterialFecha"].dt.month == datetime.now(ARGENTINA).month) &
                 (df_gastos["UsuarioID"].isin(["16162b8f", "3075a55c"]))
             ]
             total_expenses = filtered_gastos["Monto"].sum()

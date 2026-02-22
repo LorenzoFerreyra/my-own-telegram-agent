@@ -15,7 +15,7 @@ def init_db() -> sqlite3.Connection:
             chat_id   INTEGER NOT NULL,
             role      TEXT NOT NULL,
             content   TEXT NOT NULL,
-            timestamp DATETIME DEFAULT (datetime('now'))
+            timestamp DATETIME DEFAULT (datetime('now', '-3 hours'))
         )
     """)
     con.commit()
