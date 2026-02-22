@@ -30,10 +30,10 @@ async def handle_message(update, context):
     save_message(db, chat_id, "human", text)
 
     try:
-        result = agent.invoke({
-            "messages": history,
-            "chat_id": chat_id
-        })
+        result = agent.invoke(
+            {"messages": history, "chat_id": chat_id},
+            config={"recursion_limit": 10}
+        )
 
         last_message = result["messages"][-1]
         response_text = last_message.content

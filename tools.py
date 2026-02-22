@@ -18,6 +18,25 @@ from config import (
 load_dotenv()
 
 
+def _fuzzy_match(value: str, valid_list: list[str]) -> str | None:
+    """Find the full valid entry that starts with or contains the given value (case-insensitive).
+    Returns the matched full string, or None if no match found."""
+    value_lower = value.strip().lower()
+    # Exact match first
+    for item in valid_list:
+        if item.lower() == value_lower:
+            return item
+    # Prefix match
+    for item in valid_list:
+        if item.lower().startswith(value_lower):
+            return item
+    # Contains match
+    for item in valid_list:
+        if value_lower in item.lower():
+            return item
+    return None
+
+
 def get_gspread_client():
     """Initialize and return a gspread client"""
     scopes = [
@@ -43,10 +62,14 @@ def add_expense(amount: float, description: str, category: str, payment_method: 
         Confirmation message
     """
     
-    if category not in ENTRADA_CATEGORIES:
+    matched_category = _fuzzy_match(category, ENTRADA_CATEGORIES)
+    if not matched_category:
         return f"Categoría '{category}' no válida. Usa: {', '.join(ENTRADA_CATEGORIES)}"
-    if payment_method not in ENTRADA_PAYMENT_METHODS:
+    matched_payment = _fuzzy_match(payment_method, ENTRADA_PAYMENT_METHODS)
+    if not matched_payment:
         return f"Método '{payment_method}' no válido. Usa: {', '.join(ENTRADA_PAYMENT_METHODS)}"
+    category = matched_category
+    payment_method = matched_payment
     
     try:
         client = get_gspread_client()
@@ -84,11 +107,14 @@ def add_income(amount: float, description: str, category: str, payment_method: s
         Confirmation message
     """
     
-    # Validate
-    if category not in VENTAS_CATEGORIES:
+    matched_category = _fuzzy_match(category, VENTAS_CATEGORIES)
+    if not matched_category:
         return f"Categoría '{category}' no válida. Usa: {', '.join(VENTAS_CATEGORIES)}"
-    if payment_method not in VENTAS_PAYMENT_METHODS:
+    matched_payment = _fuzzy_match(payment_method, VENTAS_PAYMENT_METHODS)
+    if not matched_payment:
         return f"Método '{payment_method}' no válido. Usa: {', '.join(VENTAS_PAYMENT_METHODS)}"
+    category = matched_category
+    payment_method = matched_payment
     
     try:
         client = get_gspread_client()

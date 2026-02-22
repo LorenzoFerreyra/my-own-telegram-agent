@@ -32,7 +32,8 @@ def call_model(state: AgentState):
         When users mention spending money, use the add_expense tool.
         When users mention receiving money, use the add_income tool.        
         Be friendly and confirm what you've recorded.
-        Try not to ask for clarification, try to guess the category as much as possible.""")
+        Try not to ask for clarification, try to guess the category as much as possible.
+        Also, when successful, return the monthly report using the generate_monthly_report tool.""")
         messages = [system_msg] + messages
 
     print(f"[Ollama] Sending {len(messages)} message(s) to qwen3:4b...")
@@ -89,16 +90,26 @@ def build_graph():
     
     return workflow.compile()
 
+
 def generate_report(state: AgentState):
     """Node to automatically generate the monthly report after add_expense or add_income"""
     report = generate_monthly_report.invoke({})
     return {"messages": [report]}
 
+
 def should_generate_report(state: AgentState):
-    """Check if the last tool was add_expense or add_income to trigger report"""
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        tool_name = last_message.tool_calls[0]["name"]
+    """Check if the last tool was add_expense or add_income to trigger report.
+    After ToolNode runs, messages[-1] is the ToolMessage (result),
+    and messages[-2] is the AIMessage that requested the tool call.
+    """
+    messages = state["messages"]
+    if len(messages) < 2:
+        return "agent"
+    ai_message = messages[-2]
+    if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
+        tool_name = ai_message.tool_calls[0]["name"]
+        tool_result = messages[-1].content if hasattr(messages[-1], "content") else ""
+        print(f"[Tool] {tool_name} result: {tool_result}")
         if tool_name in ["add_expense", "add_income"]:
             return "generate_report"
     return "agent"
