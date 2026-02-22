@@ -62,58 +62,19 @@ def should_continue(state: AgentState):
 
 def build_graph():
     """Build the LangGraph workflow"""
-    
-    
     workflow = StateGraph(AgentState)
-    
-    
+
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", ToolNode(tools))
-    workflow.add_node("generate_report", generate_report)
-    
+
     workflow.set_entry_point("agent")
-    
+
     workflow.add_conditional_edges(
         "agent",
         should_continue,
-        {
-            "tools": "tools",
-            "end": END
-        }
+        {"tools": "tools", "end": END}
     )
-    workflow.add_conditional_edges(
-        "tools",
-        should_generate_report,
-        {
-            "generate_report": "generate_report",
-            "agent": "agent"
-        }
-    )
-    
-    workflow.add_edge("generate_report", "agent")
-    
+    workflow.add_edge("tools", "agent")
+
     return workflow.compile()
 
-
-def generate_report(state: AgentState):
-    """Node to automatically generate the monthly report after add_expense or add_income"""
-    report = generate_monthly_report.invoke({})
-    return {"messages": [report]}
-
-
-def should_generate_report(state: AgentState):
-    """Check if the last tool was add_expense or add_income to trigger report.
-    After ToolNode runs, messages[-1] is the ToolMessage (result),
-    and messages[-2] is the AIMessage that requested the tool call.
-    """
-    messages = state["messages"]
-    if len(messages) < 2:
-        return "agent"
-    ai_message = messages[-2]
-    if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
-        tool_name = ai_message.tool_calls[0]["name"]
-        tool_result = messages[-1].content if hasattr(messages[-1], "content") else ""
-        print(f"[Tool] {tool_name} result: {tool_result}")
-        if tool_name in ["add_expense", "add_income"]:
-            return "generate_report"
-    return "agent"
