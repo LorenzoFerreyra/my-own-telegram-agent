@@ -1,8 +1,7 @@
-from collections import defaultdict
 from telegram.ext import Application, MessageHandler, filters
 from agent import build_graph
 from langchain_core.messages import HumanMessage, AIMessage
-from database import init_db, is_duplicate, mark_processed
+from database import init_db, is_duplicate, mark_processed, save_message, load_history
 import os
 from dotenv import load_dotenv
 
@@ -10,9 +9,7 @@ load_dotenv()
 
 agent = build_graph()
 
-# In-memory conversation history per chat_id (resets on restart)
-conversation_history = defaultdict(list)
-# sqlite initialization for deduplication
+# sqlite initialization
 db = init_db()
 
 
@@ -27,18 +24,21 @@ async def handle_message(update, context):
 
     print(f"Recibido mensaje de {chat_id}: {text}")
 
-    conversation_history[chat_id].append(HumanMessage(content=text))
+    # Load history from SQLite and append new message
+    history = load_history(db, chat_id)
+    history.append(HumanMessage(content=text))
+    save_message(db, chat_id, "human", text)
 
     try:
         result = agent.invoke({
-            "messages": conversation_history[chat_id],
+            "messages": history,
             "chat_id": chat_id
         })
 
         last_message = result["messages"][-1]
         response_text = last_message.content
 
-        conversation_history[chat_id].append(AIMessage(content=response_text))
+        save_message(db, chat_id, "ai", response_text)
 
         await context.bot.send_message(chat_id=chat_id, text=response_text)
         mark_processed(db, update_id)

@@ -1,60 +1,97 @@
 # Telegram Finance Agent
 
-AI-powered Telegram bot that tracks expenses and income to Google Sheets using natural language.
+Personal finance assistant that lives in your Telegram. Send a message like _"gasté 10 mil en internet"_ and it classifies, records and confirms the transaction — all processed locally on your machine, no data sent to external AI providers.
+
+## How it works
+
+```
+You (Telegram)
+      ↓
+Bot polls Telegram for new messages
+      ↓
+LangGraph agent decides what to do
+      ↓
+qwen3:4b running on Ollama (local GPU)
+      ↓
+Writes to Google Sheets via gspread
+      ↓
+Confirms back to Telegram
+```
+
+## Privacy
+
+All LLM inference runs on your local machine via **Ollama**. Your financial data never touches OpenAI, Anthropic, or any external AI service.
+
+## Hardware requirements
+
+Tested on:
+- CPU: AMD Ryzen 5
+- RAM: 32 GB
+- GPU: NVIDIA RTX 4060 8GB — model runs fully on GPU
+
+Minimum: any machine with ~3GB VRAM or 8GB RAM for CPU inference.
 
 ## Setup
 
-1. Install dependencies:
+### 1. Install and start Ollama
+```bash
+# Download from https://ollama.com
+ollama serve
+ollama pull qwen3:4b
+```
+
+### 2. Install Python dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Configure environment variables in `.env`:
-```
+### 3. Configure environment variables
+Create a `.env` file in the project root:
+```env
 HTTP_TELEGRAM_TOKEN=your_telegram_bot_token
 GOOGLE_SHEET_ID=your_google_sheet_id
-GOOGLE_APPLICATION_CREDENTIALS=automatizacion-activos.json
-OPENAI_API_KEY=your_openai_api_key
+GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
+OLLAMA_BASE_URL=http://localhost:11434
 ```
 
-3. Share your Google Sheet with the service account email from your credentials file.
+> `OLLAMA_BASE_URL` defaults to `http://localhost:11434` if omitted.
 
-## Run Locally
+### 4. Share your Google Sheet
+Share the spreadsheet with the service account email from your credentials JSON file (Editor access).
 
-Start the server:
+## Run
+
 ```bash
-uvicorn main:app --reload
+python main.py
 ```
 
-Server runs at: http://127.0.0.1:8000
+No server, no public URL, no ngrok needed. The bot polls Telegram directly.
 
-## Test Locally
+## Project structure
 
-Send POST request to `http://127.0.0.1:8000/webhook`:
-
-```json
-{
-  "message": {
-    "chat": {"id": 123456},
-    "text": "Gaste 50 pesos en asado"
-  }
-}
+```
+├── main.py          # Telegram polling loop and message handler
+├── agent.py         # LangGraph agent — calls Ollama, routes to tools
+├── tools.py         # Google Sheets read/write tools (add_expense, add_income)
+├── database.py      # SQLite helpers — conversation history + dedup
+├── models.py        # Pydantic models and AgentState
+├── config.py        # Valid categories and payment methods from the sheet
+└── .env             # Secrets — never commit this
 ```
 
-## Deploy to AWS Lambda
+## Data persistence
 
-The application is Lambda-ready using Mangum handler. Package and deploy using your preferred method (SAM, Serverless, etc.).
+A local `processed_updates.db` SQLite file is created automatically on first run with two tables:
 
-## Project Structure
-
-- `main.py` - FastAPI server and webhook endpoint
-- `agent.py` - LangGraph agent logic
-- `tools.py` - Google Sheets integration tools
-- `models.py` - Pydantic models
-- `config.py` - Auto-generated enum values
+| Table | Purpose |
+|-------|---------|
+| `updates` | Stores processed `update_id`s to prevent double-booking on crashes |
+| `conversations` | Full message history per `chat_id` — survives bot restarts |
 
 ## Notes
 
-- The agent uses GPT-4o-mini for natural language understanding
-- Categories and payment methods are validated against your Google Sheets
+- Model: `qwen3:4b` — fits in 3GB VRAM, ~500ms response time
+- Qwen3 thinking tokens (`<think>...</think>`) are stripped before replying
+- Conversation context is loaded from SQLite on every message, so the bot remembers previous turns even after a restart
+- Categories and payment methods are validated against the values in `config.py`
 
