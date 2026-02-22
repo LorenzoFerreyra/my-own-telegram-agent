@@ -9,7 +9,7 @@ load_dotenv()
 
 agent = build_graph()
 
-# In-memory conversation history per chat_id (resets on restart)
+# memoria corta de conversacion
 conversation_history = defaultdict(list)
 
 
