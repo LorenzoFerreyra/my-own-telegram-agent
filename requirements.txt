@@ -1,8 +1,6 @@
-fastapi
-mangum
-uvicorn
 gspread
 langchain-ollama
 langgraph
 python-dotenv
 pandas
+python-telegram-bot

@@ -1,42 +1,22 @@
 from collections import defaultdict
-from fastapi import FastAPI
-from models import TelegramMessage
-from mangum import Mangum
+from telegram.ext import Application, MessageHandler, filters
 from agent import build_graph
 from langchain_core.messages import HumanMessage, AIMessage
 import os
-import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI()
 agent = build_graph()
 
-# memoria inmediata para conversación
+# In-memory conversation history per chat_id (resets on restart)
 conversation_history = defaultdict(list)
 
-async def send_telegram_message(chat_id: int, text: str):
-    """Send a message back to Telegram"""
-    bot_token = os.getenv("HTTP_TELEGRAM_TOKEN")
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    
-    async with httpx.AsyncClient() as client:
-        await client.post(url, json={
-            "chat_id": chat_id,
-            "text": text
-        })
 
-@app.get("/")
-def read_root():
-    return {"status": "ok", "message": "server de finanzas personales está ON"}
+async def handle_message(update, context):
+    chat_id = update.message.chat_id
+    text = update.message.text
 
-@app.post("/webhook")
-async def telegram_webhook(update: TelegramMessage):
-    
-    chat_id = update.message.get("chat", {}).get("id")
-    text = update.message.get("text", "")
-    
     print(f"Recibido mensaje de {chat_id}: {text}")
 
     conversation_history[chat_id].append(HumanMessage(content=text))
@@ -52,14 +32,24 @@ async def telegram_webhook(update: TelegramMessage):
 
         conversation_history[chat_id].append(AIMessage(content=response_text))
 
-        await send_telegram_message(chat_id, response_text)
+        await context.bot.send_message(chat_id=chat_id, text=response_text)
         print(f"Respuesta enviada: {response_text}")
 
     except Exception as e:
         error_msg = f"Lo siento, ocurrió un error: {str(e)}"
-        await send_telegram_message(chat_id, error_msg)
+        await context.bot.send_message(chat_id=chat_id, text=error_msg)
         print(f"Error: {e}")
-    
-    return {"status": "success"}
 
-handler = Mangum(app)
+
+def main():
+    token = os.getenv("HTTP_TELEGRAM_TOKEN")
+    app = Application.builder().token(token).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Bot polling started... (CTRL+C to stop)")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
+
