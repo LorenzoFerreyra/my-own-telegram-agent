@@ -3,7 +3,7 @@
 import os
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from models import AgentState
@@ -11,10 +11,10 @@ from tools import add_expense, add_income, generate_monthly_report
 
 load_dotenv()
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
+llm = ChatOllama(
+    model="qwen3:4b",
     temperature=0,
-    api_key=os.getenv("OPENAI_API_KEY")
+    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 )
 
 
@@ -27,7 +27,7 @@ def call_model(state: AgentState):
     messages = list(state["messages"])
     if len(messages) == 1:
         system_msg = SystemMessage(content="""You are a Spanish helpful personal finance assistant. 
-        You help users track their expenses and income by recording them in a Google Sheet.
+        You help users track their Argentinian pesos (ARS) expenses and income by recording them in a Google Sheet.
         
         When users mention spending money, use the add_expense tool.
         When users mention receiving money, use the add_income tool.
@@ -36,8 +36,11 @@ def call_model(state: AgentState):
         messages = [system_msg] + messages
     
     
-    response = llm_with_tools.invoke(messages)
     
+    response = llm_with_tools.invoke(messages)
+    if hasattr(response, "content") and "</think>" in response.content:
+        response.content = response.content.split("</think>")[-1].strip()
+
     return {"messages": [response]}
 
 def should_continue(state: AgentState):

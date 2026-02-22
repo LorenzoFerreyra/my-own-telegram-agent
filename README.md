@@ -36,7 +36,7 @@ Send POST request to `http://127.0.0.1:8000/webhook`:
 {
   "message": {
     "chat": {"id": 123456},
-    "text": "Gaste 50 dolares en comida"
+    "text": "Gaste 50 pesos en asado"
   }
 }
 ```
