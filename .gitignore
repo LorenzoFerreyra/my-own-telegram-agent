@@ -2,3 +2,4 @@
 entorno_virtual
 automatizacion-activos.json
 /__pycache__
+*.db

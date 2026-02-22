@@ -22,8 +22,8 @@ tools = [add_expense, add_income, generate_monthly_report]
 llm_with_tools = llm.bind_tools(tools)
 
 def call_model(state: AgentState):
-    """Node that calls the OpenAI model with the conversation history"""
-    
+    """Node that calls the Ollama model with the conversation history"""
+
     messages = list(state["messages"])
     if len(messages) == 1:
         system_msg = SystemMessage(content="""You are a Spanish helpful personal finance assistant. 
@@ -34,10 +34,11 @@ def call_model(state: AgentState):
         Be friendly and confirm what you've recorded.
         Try not to ask for clarification, try to guess the category as much as possible.""")
         messages = [system_msg] + messages
-    
-    
-    
+
+    print(f"[Ollama] Sending {len(messages)} message(s) to qwen3:4b...")
     response = llm_with_tools.invoke(messages)
+    print(f"[Ollama] Response received. Tool calls: {[tc['name'] for tc in response.tool_calls] if response.tool_calls else 'none'}")
+
     if hasattr(response, "content") and "</think>" in response.content:
         response.content = response.content.split("</think>")[-1].strip()
 
