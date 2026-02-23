@@ -175,3 +175,13 @@ A local `processed_updates.db` SQLite file is created automatically on first run
 - Conversation context is loaded from SQLite on every message, so the bot remembers previous turns even after a restart
 - Categories and payment methods are validated against the values in `config.py`
 - Ollama runs as a Windows background service — no desktop app required
+
+## TODO
+
+- Add Telegram user authentication (currently open to all)
+- Add OCR ingestion for PDF and image invoices
+- Keep a coherent conversation chain across turns
+- Fix the monthly balance quick-report tool
+- Improve logging quality and structure
+- Build more financial analysis tools
+- Support multi-tenant use so other family members can use the bot (currently IDs are hardcoded)
