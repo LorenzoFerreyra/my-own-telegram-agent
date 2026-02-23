@@ -1,6 +1,6 @@
 # Telegram Finance Agent
 
-Personal finance assistant that lives in your Telegram. Send a message like _"gasté 10 mil en internet"_ and it classifies, records and confirms the transaction — all processed locally on your machine, no data sent to external AI providers.
+Personal finance assistant that lives in your Telegram. Send a message like _"gasté 10 mil en internet"_ and it classifies, records and confirms the transaction, all processed locally on your machine, no data sent to external AI providers.
 
 ## How it works
 
@@ -27,7 +27,7 @@ All LLM inference runs on your local machine via **Ollama**. Your financial data
 Tested on:
 - CPU: AMD Ryzen 5
 - RAM: 32 GB
-- GPU: NVIDIA RTX 4060 8GB — model runs fully on GPU
+- GPU: NVIDIA RTX 4060 8GB  model runs fully on GPU
 
 Minimum: any machine with ~3GB VRAM or 8GB RAM for CPU inference.
 
@@ -37,11 +37,11 @@ Minimum: any machine with ~3GB VRAM or 8GB RAM for CPU inference.
 Install Ollama from [https://ollama.com](https://ollama.com) using the official Windows installer.
 
 - The installer registers Ollama as a **Windows background service** that starts automatically at boot
-- No need to open the desktop app or run `ollama serve` manually — it's already running
+- No need to open the desktop app or run `ollama serve` manually  it's already running
 - Verify it's up at any time: `http://localhost:11434` should return `Ollama is running`
 
 ```bash
-# Pull the model once after installing
+
 ollama pull qwen3:4b
 ```
 
@@ -102,7 +102,7 @@ It launches Ollama and the bot completely silently, and auto-restarts on crash.
 **How it works:**
 1. Starts `ollama serve` hidden in the background
 2. Waits 3 seconds for Ollama to be ready
-3. Runs the bot in a loop — no visible window, logs go to `bot_log.txt`
+3. Runs the bot in a loop  no visible window, logs go to `bot_log.txt`
 
 **Usage:** just double-click `start_bot.vbs`, or register it as a scheduled task (see below).
 
@@ -110,7 +110,7 @@ It launches Ollama and the bot completely silently, and auto-restarts on crash.
 
 ### Run on Windows startup (optional)
 
-**Option A — Shell script via scheduled task:**
+**Option A  Shell script via scheduled task:**
 
 ```powershell
 $action = New-ScheduledTaskAction `
@@ -123,9 +123,9 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn
 Register-ScheduledTask -TaskName "TelegramFinanceBot" -Action $action -Trigger $trigger -RunLevel Highest
 ```
 
-**Option B — VBS launcher (fully headless, recommended for Windows):**
+**Option B  VBS launcher (fully headless, recommended for Windows):**
 
-Run once in **admin** PowerShell — starts at login, no windows ever:
+Run once in **admin** PowerShell  starts at login, no windows ever:
 
 ```powershell
 $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"C:\Users\Lorenzo\Documents\Desktop project versions\my-own-telegram-agent\start_bot.vbs`""
@@ -149,14 +149,14 @@ Unregister-ScheduledTask -TaskName "TelegramBot" -Confirm:$false
 
 ```
 ├── main.py          # Telegram polling loop and message handler
-├── agent.py         # LangGraph agent — calls Ollama, routes to tools
+├── agent.py         # LangGraph agent  calls Ollama, routes to tools
 ├── tools.py         # Google Sheets read/write tools (add_expense, add_income)
-├── database.py      # SQLite helpers — conversation history + dedup
+├── database.py      # SQLite helpers  conversation history + dedup
 ├── models.py        # Pydantic models and AgentState
 ├── config.py        # Valid categories and payment methods from the sheet
 ├── start_bot.sh     # Git Bash launcher with auto-restart
-├── start_bot.vbs    # Headless Windows launcher — no terminal window, auto-restarts
-└── .env             # Secrets — never commit this
+├── start_bot.vbs    # Headless Windows launcher  no terminal window, auto-restarts
+└── .env             # Secrets  never commit this
 ```
 
 ## Data persistence
@@ -166,15 +166,15 @@ A local `processed_updates.db` SQLite file is created automatically on first run
 | Table | Purpose |
 |-------|---------|
 | `updates` | Stores processed `update_id`s to prevent double-booking on crashes |
-| `conversations` | Full message history per `chat_id` — survives bot restarts |
+| `conversations` | Full message history per `chat_id`  survives bot restarts |
 
 ## Notes
 
-- Model: `qwen3:4b` — fits in 3GB VRAM, ~500ms response time
+- Model: `qwen3:4b`  fits in 3GB VRAM, ~500ms response time
 - Qwen3 thinking tokens (`<think>...</think>`) are stripped before replying
 - Conversation context is loaded from SQLite on every message, so the bot remembers previous turns even after a restart
 - Categories and payment methods are validated against the values in `config.py`
-- Ollama runs as a Windows background service — no desktop app required
+- Ollama runs as a Windows background service. no desktop app required
 
 ## TODO
 
