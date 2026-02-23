@@ -3,9 +3,14 @@ from agent import build_graph
 from langchain_core.messages import HumanMessage, AIMessage
 from database import init_db, is_duplicate, mark_processed, save_message, load_history
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# to avoid BUG: 'charmap' codec can't encode character '\U0001f42c'
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 agent = build_graph()
 
@@ -61,4 +66,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
