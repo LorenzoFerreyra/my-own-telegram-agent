@@ -1,11 +1,13 @@
 """Telegram agent module for personal finance assistance."""
 
 import os
+
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
 from langchain_ollama import ChatOllama
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
+
 from models import AgentState
 from tools import add_expense, add_income, generate_monthly_report
 
@@ -14,19 +16,21 @@ load_dotenv()
 llm = ChatOllama(
     model="qwen3:4b",
     temperature=0,
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
 )
 
 
 tools = [add_expense, add_income, generate_monthly_report]
 llm_with_tools = llm.bind_tools(tools)
 
+
 def call_model(state: AgentState):
     """Node that calls the Ollama model with the conversation history"""
 
     messages = list(state["messages"])
     if len(messages) == 1:
-        system_msg = SystemMessage(content="""You are a personal finance assistant. Your ONLY job is to record transactions immediately.
+        system_msg = SystemMessage(
+            content="""You are a personal finance assistant. Your ONLY job is to record transactions immediately.
 
         RULES - follow strictly:
         - When the user mentions spending money: call add_expense RIGHT AWAY. Do not ask for confirmation.
@@ -37,29 +41,32 @@ def call_model(state: AgentState):
         - After recording, reply with one short confirmation line in Spanish. Nothing more.
         - NEVER use emojis in any response. Plain text only.
         - All amounts are in Argentinian pesos (ARS).
-        Also, when successful, return the monthly report using the generate_monthly_report tool.""")
-        
+        - When the user asks for a report, balance, or summary: call generate_monthly_report RIGHT AWAY."""
+        )
+
         messages = [system_msg] + messages
 
     print(f"[Ollama] Sending {len(messages)} message(s) to qwen3:4b...")
     response = llm_with_tools.invoke(messages)
-    print(f"[Ollama] Response received. Tool calls: {[tc['name'] for tc in response.tool_calls] if response.tool_calls else 'none'}")
+    print(
+        f"[Ollama] Response received. Tool calls: {[tc['name'] for tc in response.tool_calls] if response.tool_calls else 'none'}"
+    )
 
     if hasattr(response, "content") and "</think>" in response.content:
         response.content = response.content.split("</think>")[-1].strip()
 
     return {"messages": [response]}
 
+
 def should_continue(state: AgentState):
     """Decide if we should use tools or end"""
     last_message = state["messages"][-1]
-    
-    
+
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
-    
-    
+
     return "end"
+
 
 def build_graph():
     """Build the LangGraph workflow"""
@@ -71,11 +78,8 @@ def build_graph():
     workflow.set_entry_point("agent")
 
     workflow.add_conditional_edges(
-        "agent",
-        should_continue,
-        {"tools": "tools", "end": END}
+        "agent", should_continue, {"tools": "tools", "end": END}
     )
     workflow.add_edge("tools", "agent")
 
     return workflow.compile()
-
