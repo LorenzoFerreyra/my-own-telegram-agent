@@ -80,6 +80,6 @@ def build_graph():
     workflow.add_conditional_edges(
         "agent", should_continue, {"tools": "tools", "end": END}
     )
-    workflow.add_edge("tools", "agent")
+    workflow.add_edge("tools", END)
 
     return workflow.compile()

@@ -99,7 +99,7 @@ def add_expense(
             if hasattr(generate_monthly_report, "invoke")
             else generate_monthly_report()
         )
-        return f"Gasto registrado: ${amount} en {description} ({category}) por el bot\n\n{report}"
+        return f"Gasto de ${amount} en {description} registrado.\n\n{report}"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -151,7 +151,7 @@ def add_income(
             if hasattr(generate_monthly_report, "invoke")
             else generate_monthly_report()
         )
-        return f"Ingreso registrado: ${amount} de {description} ({category}) por el bot\n\n{report}"
+        return f"Ingreso de ${amount} por {description} registrado.\n\n{report}"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -209,10 +209,9 @@ def generate_monthly_report() -> str:
 
         balance = total_income - total_expenses
         message = (
-            f"Este mes tuvimos:\n"
-            f"Ingresos totales: ${total_income:.2f}\n"
-            f"Gastos totales: ${total_expenses:.2f}\n"
-            f"Balance: ${balance:.2f}"
+            f"Balance del mes:\n"
+            f"Ingresos: ${total_income:.2f} | Gastos: ${total_expenses:.2f}\n"
+            f"Total disponible: ${balance:.2f}"
         )
         return message
     except Exception as e:
