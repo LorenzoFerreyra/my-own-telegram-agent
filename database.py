@@ -1,6 +1,6 @@
 import sqlite3
-import json
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 DB_PATH = "processed_updates.db"
 
@@ -47,12 +47,13 @@ def save_message(con: sqlite3.Connection, chat_id: int, role: str, content: str)
     con.commit()
 
 
-def load_history(con: sqlite3.Connection, chat_id: int) -> list[BaseMessage]:
-    """Load full conversation history for a chat_id as LangChain messages."""
+def load_history(con: sqlite3.Connection, chat_id: int, limit: int = 20) -> list[BaseMessage]:
+    """Load recent conversation history for a chat_id as LangChain messages."""
     rows = con.execute(
-        "SELECT role, content FROM conversations WHERE chat_id = ? ORDER BY id",
-        (chat_id,)
+        "SELECT role, content FROM conversations WHERE chat_id = ? ORDER BY id DESC LIMIT ?",
+        (chat_id, limit)
     ).fetchall()
+    rows.reverse()
     messages = []
     for role, content in rows:
         if role == "human":

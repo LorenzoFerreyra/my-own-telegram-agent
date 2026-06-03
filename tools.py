@@ -94,12 +94,8 @@ def add_expense(
             payment_method,
         ]
         worksheet.append_row(row)
-        report = (
-            generate_monthly_report.invoke({})
-            if hasattr(generate_monthly_report, "invoke")
-            else generate_monthly_report()
-        )
-        return f"Gasto de ${amount} en {description} registrado.\n\n{report}"
+        report = generate_monthly_report.invoke({})
+        return f"Gasto de ${amount} en {description} registrado (categoría: {category}, pago: {payment_method}).\n\n{report}"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -146,12 +142,8 @@ def add_income(
             category,
         ]
         worksheet.append_row(row)
-        report = (
-            generate_monthly_report.invoke({})
-            if hasattr(generate_monthly_report, "invoke")
-            else generate_monthly_report()
-        )
-        return f"Ingreso de ${amount} por {description} registrado.\n\n{report}"
+        report = generate_monthly_report.invoke({})
+        return f"Ingreso de ${amount} por {description} registrado (categoría: {category}, pago: {payment_method}).\n\n{report}"
     except Exception as e:
         return f"Error: {str(e)}"
 

@@ -24,27 +24,26 @@ tools = [add_expense, add_income, generate_monthly_report]
 llm_with_tools = llm.bind_tools(tools)
 
 
+SYSTEM_PROMPT = SystemMessage(
+    content="""You are a personal finance assistant. Your ONLY job is to record transactions immediately.
+
+RULES - follow strictly:
+- When the user mentions spending money: call add_expense RIGHT AWAY. Do not ask for confirmation.
+- When the user mentions receiving money: call add_income RIGHT AWAY. Do not ask for confirmation.
+- NEVER ask the user to confirm the category or payment method. Decide yourself and record it.
+- NEVER say "quieres que registre...?" or "confirmas...?". Just do it.
+- If the category is ambiguous, pick the closest one and proceed.
+- After recording, reply with one short confirmation line in Spanish. Nothing more.
+- All amounts are in Argentinian pesos (ARS).
+- When the user asks for a report, balance, or summary: call generate_monthly_report RIGHT AWAY.
+- Always respond in Spanish."""
+)
+
+
 def call_model(state: AgentState):
     """Node that calls the Ollama model with the conversation history"""
 
-    messages = list(state["messages"])
-    if len(messages) == 1:
-        system_msg = SystemMessage(
-            content="""You are a personal finance assistant. Your ONLY job is to record transactions immediately.
-
-        RULES - follow strictly:
-        - When the user mentions spending money: call add_expense RIGHT AWAY. Do not ask for confirmation.
-        - When the user mentions receiving money: call add_income RIGHT AWAY. Do not ask for confirmation.
-        - NEVER ask the user to confirm the category or payment method. Decide yourself and record it.
-        - NEVER say "¿quieres que registre...?" or "¿confirmas...?". Just do it.
-        - If the category is ambiguous, pick the closest one and proceed.
-        - After recording, reply with one short confirmation line in Spanish. Nothing more.
-        - NEVER use emojis in any response. Plain text only.
-        - All amounts are in Argentinian pesos (ARS).
-        - When the user asks for a report, balance, or summary: call generate_monthly_report RIGHT AWAY."""
-        )
-
-        messages = [system_msg] + messages
+    messages = [SYSTEM_PROMPT] + list(state["messages"])
 
     print(f"[Ollama] Sending {len(messages)} message(s) to qwen3:4b...")
     response = llm_with_tools.invoke(messages)
@@ -80,6 +79,6 @@ def build_graph():
     workflow.add_conditional_edges(
         "agent", should_continue, {"tools": "tools", "end": END}
     )
-    workflow.add_edge("tools", END)
+    workflow.add_edge("tools", "agent")
 
     return workflow.compile()

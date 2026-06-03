@@ -2,7 +2,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from telegram.ext import Application, MessageHandler, filters
 
 from agent import build_graph
@@ -41,19 +41,7 @@ async def handle_message(update, context):
             {"messages": history, "chat_id": chat_id}, config={"recursion_limit": 10}
         )
 
-        last_message = result["messages"][-1]
-
-        if getattr(last_message, "type", "") == "tool":
-            # If the last message is a tool response, we extract the newly generated tool contents
-            tool_messages = []
-            for msg in reversed(result["messages"]):
-                if getattr(msg, "type", "") == "tool":
-                    tool_messages.insert(0, msg.content)
-                elif getattr(msg, "type", "") == "ai":
-                    break
-            response_text = "\n\n".join(tool_messages)
-        else:
-            response_text = last_message.content
+        response_text = result["messages"][-1].content
 
         save_message(db, chat_id, "ai", response_text)
 
