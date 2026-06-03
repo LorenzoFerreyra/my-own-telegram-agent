@@ -82,10 +82,11 @@ def add_expense(
         spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
         worksheet = spreadsheet.worksheet("EntradaMaterial")
 
+        now = datetime.now(ARGENTINA)
         row = [
             uuid.uuid4().hex[:8],
-            datetime.now(ARGENTINA).strftime("%Y-%m-%d"),
-            datetime.now(ARGENTINA).strftime("%Y-%m-%d %H:%M:%S"),
+            now.strftime("%d/%m/%Y"),
+            now.strftime("%d/%m/%Y %H:%M:%S"),
             "16162b8f",
             "TRUE",
             abs(amount),
@@ -93,7 +94,7 @@ def add_expense(
             description,
             payment_method,
         ]
-        worksheet.append_row(row)
+        worksheet.append_row(row, value_input_option="USER_ENTERED")
         report = generate_monthly_report.invoke({})
         return f"Gasto de ${amount} en {description} registrado (categoría: {category}, pago: {payment_method}).\n\n{report}"
     except Exception as e:
@@ -130,10 +131,11 @@ def add_income(
         spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
         worksheet = spreadsheet.worksheet("Ventas")
 
+        now = datetime.now(ARGENTINA)
         row = [
             uuid.uuid4().hex[:8],
-            datetime.now(ARGENTINA).strftime("%Y-%m-%d"),
-            datetime.now(ARGENTINA).strftime("%Y-%m-%d %H:%M:%S"),
+            now.strftime("%d/%m/%Y"),
+            now.strftime("%d/%m/%Y %H:%M:%S"),
             "16162b8f",
             payment_method,
             "TRUE",
@@ -141,7 +143,7 @@ def add_income(
             abs(amount),
             category,
         ]
-        worksheet.append_row(row)
+        worksheet.append_row(row, value_input_option="USER_ENTERED")
         report = generate_monthly_report.invoke({})
         return f"Ingreso de ${amount} por {description} registrado (categoría: {category}, pago: {payment_method}).\n\n{report}"
     except Exception as e:

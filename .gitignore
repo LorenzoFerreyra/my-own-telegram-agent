@@ -4,3 +4,4 @@ automatizacion-activos.json
 /__pycache__
 *.db
 bot_log.txt
+.claude/

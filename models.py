@@ -1,7 +1,9 @@
-from pydantic import BaseModel
-from typing import TypedDict, Annotated, Sequence
-from langchain_core.messages import BaseMessage
 import operator
+from typing import Annotated, Sequence, TypedDict
+
+from langchain_core.messages import BaseMessage
+from pydantic import BaseModel
+
 
 class TelegramMessage(BaseModel):
     message: dict
