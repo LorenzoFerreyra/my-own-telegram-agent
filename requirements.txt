@@ -4,3 +4,4 @@ langgraph
 python-dotenv
 pandas
 python-telegram-bot
+pytest

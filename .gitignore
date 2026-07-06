@@ -1,7 +1,8 @@
 .env
 entorno_virtual
 automatizacion-activos.json
-/__pycache__
+__pycache__/
+*.py[cod]
 *.db
 bot_log.txt
 .claude/
