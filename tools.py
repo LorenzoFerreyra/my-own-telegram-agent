@@ -41,13 +41,52 @@ def _fuzzy_match(value: str, valid_list: list[str]) -> str | None:
     return None
 
 
+def _validate_transaction_inputs(
+    amount: float,
+    description: str,
+    category: str,
+    payment_method: str,
+    valid_categories: list[str],
+    valid_payment_methods: list[str],
+) -> tuple[float, str, str, str]:
+    if amount is None or not isinstance(amount, (int, float)) or not pd.notna(amount):
+        raise ValueError("El monto debe ser un número válido y mayor que cero.")
+    if amount <= 0:
+        raise ValueError("El monto debe ser mayor que cero.")
+
+    description = description.strip()
+    if not description:
+        raise ValueError("La descripción no puede estar vacía.")
+
+    matched_category = _fuzzy_match(category, valid_categories)
+    if not matched_category:
+        raise ValueError(
+            f"Categoría '{category}' no válida. Usa: {', '.join(valid_categories)}"
+        )
+
+    matched_payment = _fuzzy_match(payment_method, valid_payment_methods)
+    if not matched_payment:
+        raise ValueError(
+            f"Método '{payment_method}' no válido. Usa: {', '.join(valid_payment_methods)}"
+        )
+
+    return float(amount), description, matched_category, matched_payment
+
+
+def _get_required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"Falta la variable de entorno obligatoria: {name}")
+    return value
+
+
 def get_gspread_client():
     """Initialize and return a gspread client"""
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    creds_file = _get_required_env("GOOGLE_APPLICATION_CREDENTIALS")
     creds = Credentials.from_service_account_file(creds_file, scopes=scopes)
     return gspread.authorize(creds)
 
@@ -68,18 +107,18 @@ def add_expense(
         Confirmation message
     """
 
-    matched_category = _fuzzy_match(category, ENTRADA_CATEGORIES)
-    if not matched_category:
-        return f"Categoría '{category}' no válida. Usa: {', '.join(ENTRADA_CATEGORIES)}"
-    matched_payment = _fuzzy_match(payment_method, ENTRADA_PAYMENT_METHODS)
-    if not matched_payment:
-        return f"Método '{payment_method}' no válido. Usa: {', '.join(ENTRADA_PAYMENT_METHODS)}"
-    category = matched_category
-    payment_method = matched_payment
+    amount, description, category, payment_method = _validate_transaction_inputs(
+        amount,
+        description,
+        category,
+        payment_method,
+        ENTRADA_CATEGORIES,
+        ENTRADA_PAYMENT_METHODS,
+    )
 
     try:
         client = get_gspread_client()
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
         worksheet = spreadsheet.worksheet("EntradaMaterial")
 
         now = datetime.now(ARGENTINA)
@@ -96,9 +135,17 @@ def add_expense(
         ]
         worksheet.append_row(row, value_input_option="USER_ENTERED")
         report = generate_monthly_report.invoke({})
-        return f"Gasto de ${amount} en {description} registrado (categoría: {category}, pago: {payment_method}).\n\n{report}"
+        if report.startswith("Error generando reporte:"):
+            return (
+                f"Gasto de ${amount:g} en {description} registrado (categoría: {category}, pago: {payment_method}).\n\n"
+                f"Aviso: no se pudo generar el reporte mensual. {report}"
+            )
+        return (
+            f"Gasto de ${amount:g} en {description} registrado (categoría: {category}, pago: {payment_method}).\n\n"
+            f"{report}"
+        )
     except Exception as e:
-        return f"Error: {str(e)}"
+        raise RuntimeError(f"No se pudo registrar el gasto: {str(e)}") from e
 
 
 @tool
@@ -117,18 +164,18 @@ def add_income(
         Confirmation message
     """
 
-    matched_category = _fuzzy_match(category, VENTAS_CATEGORIES)
-    if not matched_category:
-        return f"Categoría '{category}' no válida. Usa: {', '.join(VENTAS_CATEGORIES)}"
-    matched_payment = _fuzzy_match(payment_method, VENTAS_PAYMENT_METHODS)
-    if not matched_payment:
-        return f"Método '{payment_method}' no válido. Usa: {', '.join(VENTAS_PAYMENT_METHODS)}"
-    category = matched_category
-    payment_method = matched_payment
+    amount, description, category, payment_method = _validate_transaction_inputs(
+        amount,
+        description,
+        category,
+        payment_method,
+        VENTAS_CATEGORIES,
+        VENTAS_PAYMENT_METHODS,
+    )
 
     try:
         client = get_gspread_client()
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
         worksheet = spreadsheet.worksheet("Ventas")
 
         now = datetime.now(ARGENTINA)
@@ -145,9 +192,17 @@ def add_income(
         ]
         worksheet.append_row(row, value_input_option="USER_ENTERED")
         report = generate_monthly_report.invoke({})
-        return f"Ingreso de ${amount} por {description} registrado (categoría: {category}, pago: {payment_method}).\n\n{report}"
+        if report.startswith("Error generando reporte:"):
+            return (
+                f"Ingreso de ${amount:g} por {description} registrado (categoría: {category}, pago: {payment_method}).\n\n"
+                f"Aviso: no se pudo generar el reporte mensual. {report}"
+            )
+        return (
+            f"Ingreso de ${amount:g} por {description} registrado (categoría: {category}, pago: {payment_method}).\n\n"
+            f"{report}"
+        )
     except Exception as e:
-        return f"Error: {str(e)}"
+        raise RuntimeError(f"No se pudo registrar el ingreso: {str(e)}") from e
 
 
 @tool
@@ -159,12 +214,18 @@ def generate_monthly_report() -> str:
     """
     try:
         client = get_gspread_client()
-        spreadsheet = client.open_by_key(os.getenv("GOOGLE_SHEET_ID"))
+        spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
 
         ventas_sheet = spreadsheet.worksheet("Ventas")
         ventas_data = ventas_sheet.get_all_records()
         df_ventas = pd.DataFrame(ventas_data)
         if not df_ventas.empty:
+            required_ventas_columns = {"Monto", "VentaFecha", "UsuarioID"}
+            missing_ventas_columns = required_ventas_columns - set(df_ventas.columns)
+            if missing_ventas_columns:
+                raise ValueError(
+                    f"Faltan columnas en la hoja Ventas: {', '.join(sorted(missing_ventas_columns))}"
+                )
             df_ventas["Monto"] = pd.to_numeric(df_ventas["Monto"], errors="coerce")
             df_ventas["VentaFecha"] = pd.to_datetime(
                 df_ventas["VentaFecha"], format="%d/%m/%Y", errors="coerce"
@@ -182,6 +243,12 @@ def generate_monthly_report() -> str:
         gastos_data = gastos_sheet.get_all_records()
         df_gastos = pd.DataFrame(gastos_data)
         if not df_gastos.empty:
+            required_gastos_columns = {"Monto", "EntradaMaterialFecha", "UsuarioID"}
+            missing_gastos_columns = required_gastos_columns - set(df_gastos.columns)
+            if missing_gastos_columns:
+                raise ValueError(
+                    f"Faltan columnas en la hoja EntradaMaterial: {', '.join(sorted(missing_gastos_columns))}"
+                )
             df_gastos["Monto"] = pd.to_numeric(df_gastos["Monto"], errors="coerce")
             df_gastos["EntradaMaterialFecha"] = pd.to_datetime(
                 df_gastos["EntradaMaterialFecha"], format="%d/%m/%Y", errors="coerce"
