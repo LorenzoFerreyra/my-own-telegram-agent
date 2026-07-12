@@ -1,6 +1,7 @@
 """Module for Telegram agent tools, including expense and income management via Google Sheets."""
 
 import os
+import time
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -20,6 +21,29 @@ from config import (
 )
 
 load_dotenv()
+
+# Guardrail anti-duplicados: si el modelo llama a la misma tool con los mismos
+# datos dentro de esta ventana, se ignora la segunda llamada en vez de crear
+# otra fila en la planilla.
+DEDUP_WINDOW_SECONDS = float(os.getenv("DEDUP_WINDOW_SECONDS", "120"))
+_recent_transactions: dict[tuple[str, float, str], float] = {}
+
+
+def _dedup_key(kind: str, amount: float, description: str) -> tuple[str, float, str]:
+    return (kind, round(float(amount), 2), description.strip().lower())
+
+
+def _is_recent_duplicate(kind: str, amount: float, description: str) -> bool:
+    """True if an identical transaction was already recorded within the dedup window."""
+    now = time.monotonic()
+    for key, recorded_at in list(_recent_transactions.items()):
+        if now - recorded_at > DEDUP_WINDOW_SECONDS:
+            del _recent_transactions[key]
+    return _dedup_key(kind, amount, description) in _recent_transactions
+
+
+def _remember_transaction(kind: str, amount: float, description: str) -> None:
+    _recent_transactions[_dedup_key(kind, amount, description)] = time.monotonic()
 
 
 def _fuzzy_match(value: str, valid_list: list[str]) -> str | None:
@@ -116,6 +140,12 @@ def add_expense(
         ENTRADA_PAYMENT_METHODS,
     )
 
+    if _is_recent_duplicate("expense", amount, description):
+        return (
+            f"Ese gasto de ${amount:g} en {description} ya fue registrado hace un momento. "
+            "No lo registré de nuevo para evitar duplicados. La operación ya está guardada."
+        )
+
     try:
         client = get_gspread_client()
         spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
@@ -134,6 +164,7 @@ def add_expense(
             payment_method,
         ]
         worksheet.append_row(row, value_input_option="USER_ENTERED")
+        _remember_transaction("expense", amount, description)
         report = generate_monthly_report.invoke({})
         if report.startswith("Error generando reporte:"):
             return (
@@ -173,6 +204,12 @@ def add_income(
         VENTAS_PAYMENT_METHODS,
     )
 
+    if _is_recent_duplicate("income", amount, description):
+        return (
+            f"Ese ingreso de ${amount:g} por {description} ya fue registrado hace un momento. "
+            "No lo registré de nuevo para evitar duplicados. La operación ya está guardada."
+        )
+
     try:
         client = get_gspread_client()
         spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
@@ -191,6 +228,7 @@ def add_income(
             category,
         ]
         worksheet.append_row(row, value_input_option="USER_ENTERED")
+        _remember_transaction("income", amount, description)
         report = generate_monthly_report.invoke({})
         if report.startswith("Error generando reporte:"):
             return (

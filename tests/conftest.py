@@ -20,6 +20,16 @@ def _isolate_env(monkeypatch, tmp_path):
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "nope.json"))
 
 
+@pytest.fixture(autouse=True)
+def _clear_dedup_cache():
+    """The anti-duplicate cache in tools.py is module-global; reset it per test."""
+    import tools
+
+    tools._recent_transactions.clear()
+    yield
+    tools._recent_transactions.clear()
+
+
 @pytest.fixture
 def db():
     """In-memory sqlite pre-populated with the app's schema."""

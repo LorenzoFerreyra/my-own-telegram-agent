@@ -1,5 +1,6 @@
 """Telegram agent module for personal finance assistance."""
 
+import json
 import os
 
 from dotenv import load_dotenv
@@ -33,6 +34,8 @@ RULES - follow strictly:
 - NEVER ask the user to confirm the category or payment method. Decide yourself and record it.
 - NEVER say "quieres que registre...?" or "confirmas...?". Just do it.
 - If the category is ambiguous, pick the closest one and proceed.
+- Record each transaction ONLY ONCE: call add_expense or add_income at most one time per user message.
+- If a tool result says the transaction was already recorded ("ya fue registrado"), do NOT call the tool again. Just tell the user it was already saved.
 - After recording, reply with one short confirmation line in Spanish. Nothing more.
 - All amounts are in Argentinian pesos (ARS).
 - When the user asks for a report, balance, or summary: call generate_monthly_report RIGHT AWAY.
@@ -46,6 +49,20 @@ FORMATTING RULES:
 )
 
 
+def dedupe_tool_calls(tool_calls: list) -> list:
+    """Drop repeated tool calls (same tool, same args) within a single model response,
+    keeping only the first occurrence."""
+    seen = set()
+    unique = []
+    for tc in tool_calls:
+        key = (tc["name"], json.dumps(tc.get("args", {}), sort_keys=True))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(tc)
+    return unique
+
+
 def call_model(state: AgentState):
     """Node that calls the Ollama model with the conversation history"""
 
@@ -56,6 +73,14 @@ def call_model(state: AgentState):
     print(
         f"[Ollama] Response received. Tool calls: {[tc['name'] for tc in response.tool_calls] if response.tool_calls else 'none'}"
     )
+
+    if response.tool_calls:
+        unique_calls = dedupe_tool_calls(response.tool_calls)
+        if len(unique_calls) < len(response.tool_calls):
+            print(
+                f"[Guardrail] Dropped {len(response.tool_calls) - len(unique_calls)} duplicate tool call(s)"
+            )
+            response.tool_calls = unique_calls
 
     if hasattr(response, "content") and "</think>" in response.content:
         response.content = response.content.split("</think>")[-1].strip()
