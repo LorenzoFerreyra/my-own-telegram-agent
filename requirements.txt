@@ -1,5 +1,5 @@
 gspread
-langchain-ollama
+langchain-deepseek
 langgraph
 python-dotenv
 pandas

@@ -1,6 +1,6 @@
 # Telegram Finance Agent
 
-Personal finance assistant that lives in your Telegram. Send a message like _"gasté 10 mil en internet"_ and it classifies, records and confirms the transaction, all processed locally on your machine, no data sent to external AI providers.
+Personal finance assistant that lives in your Telegram. Send a message like _"gasté 10 mil en internet"_ and it classifies, records and confirms the transaction.
 
 ## How it works
 
@@ -11,39 +11,16 @@ Bot polls Telegram for new messages
       ↓
 LangGraph agent decides what to do
       ↓
-qwen3:4b running on Ollama (local GPU)
+deepseek-v4-flash via the DeepSeek API
       ↓
 Writes to Google Sheets via gspread
       ↓
 Confirms back to Telegram
 ```
 
-## Privacy
-
-All LLM inference runs on your local machine via **Ollama**. Your financial data never touches OpenAI, Anthropic, or any external AI service.
-
-## Hardware requirements
-
-Tested on:
-- CPU: AMD Ryzen 5
-- RAM: 32 GB
-- GPU: NVIDIA RTX 4060 8GB  model runs fully on GPU
-
-Minimum: any machine with ~3GB VRAM or 8GB RAM for CPU inference.
-
 ## Prerequisites
 
-### Ollama
-Install Ollama from [https://ollama.com](https://ollama.com) using the official Windows installer.
-
-- The installer registers Ollama as a **Windows background service** that starts automatically at boot
-- No need to open the desktop app or run `ollama serve` manually  it's already running
-- Verify it's up at any time: `http://localhost:11434` should return `Ollama is running`
-
-```bash
-
-ollama pull qwen3:4b
-```
+A DeepSeek API key from [https://platform.deepseek.com](https://platform.deepseek.com).
 
 ## Setup
 
@@ -58,10 +35,10 @@ Create a `.env` file in the project root:
 HTTP_TELEGRAM_TOKEN=your_telegram_bot_token
 GOOGLE_SHEET_ID=your_google_sheet_id
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account.json
-OLLAMA_BASE_URL=http://localhost:11434
+DEEPSEEK_API_KEY=your_deepseek_api_key
 ```
 
-> `OLLAMA_BASE_URL` defaults to `http://localhost:11434` if omitted.
+> `DEEPSEEK_MODEL` can optionally be set to override the model; it defaults to `deepseek-v4-flash`.
 
 ### 3. Share your Google Sheet
 Share the spreadsheet with the service account email from your credentials JSON file (Editor access).
@@ -97,12 +74,10 @@ done
 ### Option B: Headless Windows launcher (no terminal window)
 
 If you don't want any terminal window showing up at all, use `start_bot.vbs` instead.
-It launches Ollama and the bot completely silently, and auto-restarts on crash.
+It launches the bot completely silently, and auto-restarts on crash.
 
 **How it works:**
-1. Starts `ollama serve` hidden in the background
-2. Waits 3 seconds for Ollama to be ready
-3. Runs the bot in a loop  no visible window, logs go to `bot_log.txt`
+1. Runs the bot in a loop  no visible window, logs go to `bot_log.txt`
 
 **Usage:** just double-click `start_bot.vbs`, or register it as a scheduled task (see below).
 
@@ -149,7 +124,7 @@ Unregister-ScheduledTask -TaskName "TelegramBot" -Confirm:$false
 
 ```
 ├── main.py          # Telegram polling loop and message handler
-├── agent.py         # LangGraph agent  calls Ollama, routes to tools
+├── agent.py         # LangGraph agent  calls DeepSeek, routes to tools
 ├── tools.py         # Google Sheets read/write tools (add_expense, add_income)
 ├── database.py      # SQLite helpers  conversation history + dedup
 ├── models.py        # Pydantic models and AgentState
@@ -170,11 +145,10 @@ A local `processed_updates.db` SQLite file is created automatically on first run
 
 ## Notes
 
-- Model: `qwen3:4b`  fits in 3GB VRAM, ~500ms response time
-- Qwen3 thinking tokens (`<think>...</think>`) are stripped before replying
+- Model: `deepseek-v4-flash` via the DeepSeek API (configurable with `DEEPSEEK_MODEL`)
+- Any thinking tokens (`<think>...</think>`) are stripped before replying
 - Conversation context is loaded from SQLite on every message, so the bot remembers previous turns even after a restart
 - Categories and payment methods are validated against the values in `config.py`
-- Ollama runs as a Windows background service. no desktop app required
 
 ## TODO
 

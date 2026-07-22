@@ -5,7 +5,7 @@ import os
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
-from langchain_ollama import ChatOllama
+from langchain_deepseek import ChatDeepSeek
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -14,10 +14,11 @@ from tools import add_expense, add_income, generate_monthly_report
 
 load_dotenv()
 
-llm = ChatOllama(
-    model="qwen3:4b",
+MODEL_NAME = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+
+llm = ChatDeepSeek(
+    model=MODEL_NAME,
     temperature=0,
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
 )
 
 
@@ -64,14 +65,14 @@ def dedupe_tool_calls(tool_calls: list) -> list:
 
 
 def call_model(state: AgentState):
-    """Node that calls the Ollama model with the conversation history"""
+    """Node that calls the DeepSeek model with the conversation history"""
 
     messages = [SYSTEM_PROMPT] + list(state["messages"])
 
-    print(f"[Ollama] Sending {len(messages)} message(s) to qwen3:4b...")
+    print(f"[DeepSeek] Sending {len(messages)} message(s) to {MODEL_NAME}...")
     response = llm_with_tools.invoke(messages)
     print(
-        f"[Ollama] Response received. Tool calls: {[tc['name'] for tc in response.tool_calls] if response.tool_calls else 'none'}"
+        f"[DeepSeek] Response received. Tool calls: {[tc['name'] for tc in response.tool_calls] if response.tool_calls else 'none'}"
     )
 
     if response.tool_calls:

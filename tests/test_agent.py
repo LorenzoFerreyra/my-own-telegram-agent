@@ -1,7 +1,7 @@
 """Tests for pure decision functions in agent.py.
 
 We don't import agent.py at module-import time because that instantiates a
-ChatOllama client. Instead we import lazily inside each test — good enough
+ChatDeepSeek client. Instead we import lazily inside each test — good enough
 for a local suite that just runs pytest.
 """
 
