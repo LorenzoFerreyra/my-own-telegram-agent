@@ -11,8 +11,9 @@ from database import init_db, is_duplicate, load_history, mark_processed, save_m
 load_dotenv()
 
 # to avoid BUG: 'charmap' codec can't encode character '\U0001f42c'
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+# line_buffering so print() reaches bot_log.txt immediately when redirected
+sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
 agent = build_graph()
 
@@ -33,8 +34,9 @@ async def handle_message(update, context):
 
     # Load history from SQLite and append new message
     history = load_history(db, chat_id)
-    history.append(HumanMessage(content=text))
-    save_message(db, chat_id, "human", text)
+    user_message = HumanMessage(content=text)
+    history.append(user_message)
+    save_message(db, chat_id, user_message)
 
     try:
         result = agent.invoke(
@@ -43,7 +45,11 @@ async def handle_message(update, context):
 
         response_text = result["messages"][-1].content
 
-        save_message(db, chat_id, "ai", response_text)
+        # Persist every message the agent produced this turn (tool calls and
+        # tool results included) so replayed history shows the model that
+        # confirmations always come after a real tool call.
+        for message in result["messages"][len(history):]:
+            save_message(db, chat_id, message)
 
         await context.bot.send_message(chat_id=chat_id, text=response_text)
         mark_processed(db, update_id)

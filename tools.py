@@ -22,6 +22,15 @@ from config import (
 
 load_dotenv()
 
+# Filas de las planillas que pertenecen a este usuario (hay filas de otras
+# automatizaciones en las mismas hojas).
+KNOWN_USER_IDS = ["16162b8f", "3075a55c"]
+
+MONTH_NAMES_ES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
 # Guardrail anti-duplicados: si el modelo llama a la misma tool con los mismos
 # datos dentro de esta ventana, se ignora la segunda llamada en vez de crear
 # otra fila en la planilla.
@@ -243,75 +252,185 @@ def add_income(
         raise RuntimeError(f"No se pudo registrar el ingreso: {str(e)}") from e
 
 
+# ── reporting helpers ───────────────────────────────────────────────
+
+
+def _resolve_month(month: int | None, year: int | None) -> tuple[int, int]:
+    """Fill in missing month/year with the current date in Argentina."""
+    now = datetime.now(ARGENTINA)
+    month = month if month is not None else now.month
+    year = year if year is not None else now.year
+    if not 1 <= month <= 12:
+        raise ValueError("El mes debe estar entre 1 y 12.")
+    return month, year
+
+
+def _month_label(month: int, year: int) -> str:
+    return f"{MONTH_NAMES_ES[month - 1]} {year}"
+
+
+def _short_category(category: str) -> str:
+    """'Alimentación (comestibles, restaurantes)' -> 'Alimentación'."""
+    return str(category).split(" (")[0]
+
+
+def _load_transactions(
+    spreadsheet, worksheet_name: str, date_column: str, extra_columns: tuple = ()
+) -> pd.DataFrame:
+    """Read a worksheet into a DataFrame ready for reporting: Monto as numbers,
+    dates parsed, and only the rows that belong to the known users."""
+    df = pd.DataFrame(spreadsheet.worksheet(worksheet_name).get_all_records())
+    if df.empty:
+        return df
+
+    required = {"Monto", date_column, "UsuarioID", *extra_columns}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Faltan columnas en la hoja {worksheet_name}: {', '.join(sorted(missing))}"
+        )
+
+    df["Monto"] = pd.to_numeric(df["Monto"], errors="coerce")
+    df[date_column] = pd.to_datetime(
+        df[date_column], format="%d/%m/%Y", errors="coerce"
+    )
+    return df[df["UsuarioID"].isin(KNOWN_USER_IDS)]
+
+
+def _month_rows(df: pd.DataFrame, date_column: str, month: int, year: int) -> pd.DataFrame:
+    """Rows of df that fall inside the given month."""
+    if df.empty:
+        return df
+    dates = df[date_column]
+    return df[(dates.dt.year == year) & (dates.dt.month == month)]
+
+
+def _month_total(df: pd.DataFrame, date_column: str, month: int, year: int) -> float:
+    """Sum of Monto for the given month; 0.0 when there are no rows."""
+    rows = _month_rows(df, date_column, month, year)
+    return 0.0 if rows.empty else float(rows["Monto"].sum())
+
+
 @tool
-def generate_monthly_report() -> str:
-    """Generate a monthly balance report: total income minus total expenses for the current month.
+def generate_monthly_report(month: int | None = None, year: int | None = None) -> str:
+    """Generate a balance report: total income minus total expenses for one month.
+
+    Args:
+        month: Month to report, 1-12. Defaults to the current month.
+        year: Four-digit year. Defaults to the current year.
 
     Returns:
         A string message with the balance summary.
     """
     try:
+        month, year = _resolve_month(month, year)
         client = get_gspread_client()
         spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
 
-        ventas_sheet = spreadsheet.worksheet("Ventas")
-        ventas_data = ventas_sheet.get_all_records()
-        df_ventas = pd.DataFrame(ventas_data)
-        if not df_ventas.empty:
-            required_ventas_columns = {"Monto", "VentaFecha", "UsuarioID"}
-            missing_ventas_columns = required_ventas_columns - set(df_ventas.columns)
-            if missing_ventas_columns:
-                raise ValueError(
-                    f"Faltan columnas en la hoja Ventas: {', '.join(sorted(missing_ventas_columns))}"
-                )
-            df_ventas["Monto"] = pd.to_numeric(df_ventas["Monto"], errors="coerce")
-            df_ventas["VentaFecha"] = pd.to_datetime(
-                df_ventas["VentaFecha"], format="%d/%m/%Y", errors="coerce"
-            )
-            filtered_ventas = df_ventas[
-                (df_ventas["VentaFecha"].dt.year == datetime.now(ARGENTINA).year)
-                & (df_ventas["VentaFecha"].dt.month == datetime.now(ARGENTINA).month)
-                & (df_ventas["UsuarioID"].isin(["16162b8f", "3075a55c"]))
-            ]
-            total_income = filtered_ventas["Monto"].sum()
-        else:
-            total_income = 0.0
+        ventas = _load_transactions(spreadsheet, "Ventas", "VentaFecha")
+        gastos = _load_transactions(spreadsheet, "EntradaMaterial", "EntradaMaterialFecha")
 
-        gastos_sheet = spreadsheet.worksheet("EntradaMaterial")
-        gastos_data = gastos_sheet.get_all_records()
-        df_gastos = pd.DataFrame(gastos_data)
-        if not df_gastos.empty:
-            required_gastos_columns = {"Monto", "EntradaMaterialFecha", "UsuarioID"}
-            missing_gastos_columns = required_gastos_columns - set(df_gastos.columns)
-            if missing_gastos_columns:
-                raise ValueError(
-                    f"Faltan columnas en la hoja EntradaMaterial: {', '.join(sorted(missing_gastos_columns))}"
-                )
-            df_gastos["Monto"] = pd.to_numeric(df_gastos["Monto"], errors="coerce")
-            df_gastos["EntradaMaterialFecha"] = pd.to_datetime(
-                df_gastos["EntradaMaterialFecha"], format="%d/%m/%Y", errors="coerce"
-            )
-            filtered_gastos = df_gastos[
-                (
-                    df_gastos["EntradaMaterialFecha"].dt.year
-                    == datetime.now(ARGENTINA).year
-                )
-                & (
-                    df_gastos["EntradaMaterialFecha"].dt.month
-                    == datetime.now(ARGENTINA).month
-                )
-                & (df_gastos["UsuarioID"].isin(["16162b8f", "3075a55c"]))
-            ]
-            total_expenses = filtered_gastos["Monto"].sum()
-        else:
-            total_expenses = 0.0
-
+        total_income = _month_total(ventas, "VentaFecha", month, year)
+        total_expenses = _month_total(gastos, "EntradaMaterialFecha", month, year)
         balance = total_income - total_expenses
-        message = (
-            f"Balance del mes:\n"
-            f"Ingresos: ${total_income:.2f} | Gastos: ${total_expenses:.2f}\n"
-            f"Total disponible: ${balance:.2f}"
+
+        return (
+            f"Balance de {_month_label(month, year)}:\n"
+            f"Ingresos: ${total_income:,.2f} | Gastos: ${total_expenses:,.2f}\n"
+            f"Total disponible: ${balance:,.2f}"
         )
-        return message
     except Exception as e:
         return f"Error generando reporte: {str(e)}"
+
+
+@tool
+def spending_by_category(month: int | None = None, year: int | None = None) -> str:
+    """Break down one month's expenses by category, biggest first.
+
+    Args:
+        month: Month to analyze, 1-12. Defaults to the current month.
+        year: Four-digit year. Defaults to the current year.
+
+    Returns:
+        A string with one line per category, sorted by amount spent.
+    """
+    try:
+        month, year = _resolve_month(month, year)
+        client = get_gspread_client()
+        spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
+
+        gastos = _load_transactions(
+            spreadsheet, "EntradaMaterial", "EntradaMaterialFecha",
+            extra_columns=("Categoria",),
+        )
+        month_expenses = _month_rows(gastos, "EntradaMaterialFecha", month, year)
+        if month_expenses.empty:
+            return f"No hay gastos registrados en {_month_label(month, year)}."
+
+        totals = (
+            month_expenses.groupby("Categoria")["Monto"].sum().sort_values(ascending=False)
+        )
+        grand_total = totals.sum()
+
+        lines = [f"Gastos por categoría en {_month_label(month, year)}:"]
+        for category, amount in totals.items():
+            share = amount / grand_total * 100
+            lines.append(f"- {_short_category(category)}: ${amount:,.2f} ({share:.0f}%)")
+        lines.append(f"Total: ${grand_total:,.2f}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error generando desglose: {str(e)}"
+
+
+@tool
+def list_recent_transactions(limit: int = 10) -> str:
+    """List the most recent transactions, expenses and incomes combined.
+
+    Args:
+        limit: How many transactions to show, most recent first (default 10).
+
+    Returns:
+        A string with one line per transaction.
+    """
+    try:
+        if limit <= 0:
+            raise ValueError("La cantidad debe ser mayor que cero.")
+
+        client = get_gspread_client()
+        spreadsheet = client.open_by_key(_get_required_env("GOOGLE_SHEET_ID"))
+
+        gastos = _load_transactions(
+            spreadsheet, "EntradaMaterial", "EntradaMaterialFecha",
+            extra_columns=("Notas", "Categoria"),
+        )
+        ventas = _load_transactions(
+            spreadsheet, "Ventas", "VentaFecha",
+            extra_columns=("VentaNotas", "Categoria"),
+        )
+
+        entries = []
+        for _, row in gastos.iterrows():
+            entries.append(
+                (row["EntradaMaterialFecha"], "Gasto", row["Monto"], row["Notas"], row["Categoria"])
+            )
+        for _, row in ventas.iterrows():
+            entries.append(
+                (row["VentaFecha"], "Ingreso", row["Monto"], row["VentaNotas"], row["Categoria"])
+            )
+
+        entries = [e for e in entries if pd.notna(e[0])]
+        if not entries:
+            return "No hay movimientos registrados todavía."
+
+        entries.sort(key=lambda e: e[0], reverse=True)
+        shown = entries[:limit]
+
+        lines = [f"Últimos {len(shown)} movimientos:"]
+        for when, kind, amount, note, category in shown:
+            lines.append(
+                f"- {when.strftime('%d/%m/%Y')} | {kind} | ${amount:,.2f} | "
+                f"{note} ({_short_category(category)})"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error listando movimientos: {str(e)}"

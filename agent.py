@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
@@ -10,7 +11,14 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from models import AgentState
-from tools import add_expense, add_income, generate_monthly_report
+from tools import (
+    ARGENTINA,
+    add_expense,
+    add_income,
+    generate_monthly_report,
+    list_recent_transactions,
+    spending_by_category,
+)
 
 load_dotenv()
 
@@ -22,12 +30,17 @@ llm = ChatDeepSeek(
 )
 
 
-tools = [add_expense, add_income, generate_monthly_report]
+tools = [
+    add_expense,
+    add_income,
+    generate_monthly_report,
+    spending_by_category,
+    list_recent_transactions,
+]
 llm_with_tools = llm.bind_tools(tools)
 
 
-SYSTEM_PROMPT = SystemMessage(
-    content="""You are a personal finance assistant. Your ONLY job is to record transactions immediately.
+SYSTEM_PROMPT_TEMPLATE = """You are a personal finance assistant. Your ONLY job is to record transactions immediately.
 
 RULES - follow strictly:
 - When the user mentions spending money: call add_expense RIGHT AWAY. Do not ask for confirmation.
@@ -40,6 +53,9 @@ RULES - follow strictly:
 - After recording, reply with one short confirmation line in Spanish. Nothing more.
 - All amounts are in Argentinian pesos (ARS).
 - When the user asks for a report, balance, or summary: call generate_monthly_report RIGHT AWAY.
+- When the user asks where their money went or which category they spent most on: call spending_by_category.
+- When the user asks for their latest transactions or movements: call list_recent_transactions.
+- Today is {today}. When the user names a specific month ("mayo", "marzo 2025"), pass month and year to the tool. A month with no year means the most recent past occurrence of that month. With no month at all, omit both arguments to get the current month.
 - Always respond in Spanish.
 
 FORMATTING RULES:
@@ -47,7 +63,12 @@ FORMATTING RULES:
 - NEVER use Markdown formatting. No bold (**text**), no italic (*text*), no headers (#), no code blocks, no horizontal rules (---).
 - Use plain text only. For lists, use simple dashes (-) without nesting.
 - Keep responses clean and readable as plain text."""
-)
+
+
+def build_system_prompt() -> SystemMessage:
+    """The system prompt with today's date filled in, so month names resolve correctly."""
+    today = datetime.now(ARGENTINA).strftime("%d/%m/%Y")
+    return SystemMessage(content=SYSTEM_PROMPT_TEMPLATE.format(today=today))
 
 
 def dedupe_tool_calls(tool_calls: list) -> list:
@@ -67,7 +88,7 @@ def dedupe_tool_calls(tool_calls: list) -> list:
 def call_model(state: AgentState):
     """Node that calls the DeepSeek model with the conversation history"""
 
-    messages = [SYSTEM_PROMPT] + list(state["messages"])
+    messages = [build_system_prompt()] + list(state["messages"])
 
     print(f"[DeepSeek] Sending {len(messages)} message(s) to {MODEL_NAME}...")
     response = llm_with_tools.invoke(messages)

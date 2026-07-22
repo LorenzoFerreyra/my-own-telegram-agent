@@ -1,6 +1,6 @@
 """Round-trip tests for the sqlite layer used by the Telegram bot."""
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from database import (
     is_duplicate,
@@ -40,8 +40,8 @@ def test_mark_processed_is_idempotent(db):
 
 def test_save_and_load_history_roundtrip(db):
     chat_id = 1001
-    save_message(db, chat_id, "human", "hola")
-    save_message(db, chat_id, "ai", "hola, ¿en qué puedo ayudarte?")
+    save_message(db, chat_id, HumanMessage(content="hola"))
+    save_message(db, chat_id, AIMessage(content="hola, ¿en qué puedo ayudarte?"))
 
     history = load_history(db, chat_id)
 
@@ -52,10 +52,31 @@ def test_save_and_load_history_roundtrip(db):
     assert history[1].content == "hola, ¿en qué puedo ayudarte?"
 
 
+def test_tool_call_sequence_roundtrip(db):
+    chat_id = 1005
+    tool_call = {
+        "name": "add_expense",
+        "args": {"amount": 6000, "description": "alfajor", "category": "Alimentación"},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    save_message(db, chat_id, HumanMessage(content="anota 6000 de un alfajor"))
+    save_message(db, chat_id, AIMessage(content="", tool_calls=[tool_call]))
+    save_message(db, chat_id, ToolMessage(content="registrado", tool_call_id="call_1"))
+    save_message(db, chat_id, AIMessage(content="Gasto registrado."))
+
+    history = load_history(db, chat_id)
+
+    assert [m.type for m in history] == ["human", "ai", "tool", "ai"]
+    assert history[1].tool_calls[0]["name"] == "add_expense"
+    assert history[1].tool_calls[0]["args"]["amount"] == 6000
+    assert history[2].tool_call_id == "call_1"
+
+
 def test_load_history_returns_oldest_first(db):
     chat_id = 1002
     for i in range(5):
-        save_message(db, chat_id, "human", f"msg-{i}")
+        save_message(db, chat_id, HumanMessage(content=f"msg-{i}"))
 
     history = load_history(db, chat_id)
     assert [m.content for m in history] == [f"msg-{i}" for i in range(5)]
@@ -64,7 +85,7 @@ def test_load_history_returns_oldest_first(db):
 def test_load_history_respects_limit_and_keeps_most_recent(db):
     chat_id = 1003
     for i in range(10):
-        save_message(db, chat_id, "human", f"msg-{i}")
+        save_message(db, chat_id, HumanMessage(content=f"msg-{i}"))
 
     history = load_history(db, chat_id, limit=3)
     # last 3 inserted, still in chronological order
@@ -72,22 +93,33 @@ def test_load_history_respects_limit_and_keeps_most_recent(db):
 
 
 def test_load_history_isolates_chats(db):
-    save_message(db, 1, "human", "chat one")
-    save_message(db, 2, "human", "chat two")
+    save_message(db, 1, HumanMessage(content="chat one"))
+    save_message(db, 2, HumanMessage(content="chat two"))
 
     assert [m.content for m in load_history(db, 1)] == ["chat one"]
     assert [m.content for m in load_history(db, 2)] == ["chat two"]
 
 
-def test_load_history_ignores_unknown_role(db):
+def test_load_history_skips_legacy_plaintext_rows(db):
     chat_id = 1004
-    save_message(db, chat_id, "human", "kept")
-    # bypass save_message to inject a role load_history should skip
+    # legacy rows stored raw text instead of serialized messages; they must not
+    # be replayed because they show confirmations without tool calls
     db.execute(
         "INSERT INTO conversations (chat_id, role, content) VALUES (?, ?, ?)",
-        (chat_id, "system", "should be skipped"),
+        (chat_id, "ai", "El gasto se agregó correctamente."),
     )
     db.commit()
+    save_message(db, chat_id, HumanMessage(content="kept"))
 
     history = load_history(db, chat_id)
     assert [m.content for m in history] == ["kept"]
+
+
+def test_load_history_drops_orphaned_leading_tool_messages(db):
+    chat_id = 1006
+    save_message(db, chat_id, ToolMessage(content="orphan", tool_call_id="call_0"))
+    save_message(db, chat_id, HumanMessage(content="hola"))
+
+    # limit window starts at the tool message; it must be dropped
+    history = load_history(db, chat_id, limit=2)
+    assert [m.type for m in history] == ["human"]

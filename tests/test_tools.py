@@ -9,7 +9,16 @@ from config import (
     VENTAS_PAYMENT_METHODS,
 )
 import tools
-from tools import _fuzzy_match, add_expense, add_income
+from tools import (
+    _fuzzy_match,
+    _resolve_month,
+    _short_category,
+    add_expense,
+    add_income,
+    generate_monthly_report,
+    list_recent_transactions,
+    spending_by_category,
+)
 
 
 # ── _fuzzy_match ───────────────────────────────────────────────────
@@ -417,3 +426,194 @@ def test_failed_append_does_not_block_retry(monkeypatch):
     retry = add_expense.invoke(_EXPENSE)
     assert "ya fue registrado" not in retry
     assert len(worksheet.rows) == 1
+
+
+# ── reporting tools ─────────────────────────────────────────────────
+# These feed fixed rows through dummy worksheets, so every path runs offline.
+
+def _expense_record(fecha, monto, categoria="Alimentación (comestibles, restaurantes)",
+                    nota="pizza", usuario="16162b8f"):
+    return {
+        "EntradaMaterialID": "abc123",
+        "EntradaMaterialFecha": fecha,
+        "EntradaMaterialHora": f"{fecha} 12:00:00",
+        "UsuarioID": usuario,
+        "EntradaMaterialStatus": "TRUE",
+        "Monto": monto,
+        "Categoria": categoria,
+        "Notas": nota,
+        "MetodoPago": "Efectivo",
+    }
+
+
+def _income_record(fecha, monto, categoria="Salario", nota="sueldo", usuario="16162b8f"):
+    return {
+        "VentaID": "abc123",
+        "VentaFecha": fecha,
+        "VentaHora": f"{fecha} 12:00:00",
+        "UsuarioID": usuario,
+        "VentaMetodoPago": "Efectivo",
+        "VentaStatus": "TRUE",
+        "VentaNotas": nota,
+        "Monto": monto,
+        "Categoria": categoria,
+    }
+
+
+class _RecordsWorksheet:
+    def __init__(self, records):
+        self.records = records
+
+    def get_all_records(self):
+        return self.records
+
+
+class _RecordsSpreadsheet:
+    def __init__(self, ventas, gastos):
+        self._sheets = {
+            "Ventas": _RecordsWorksheet(ventas),
+            "EntradaMaterial": _RecordsWorksheet(gastos),
+        }
+
+    def worksheet(self, name):
+        return self._sheets[name]
+
+
+@pytest.fixture
+def sheet_data(monkeypatch):
+    """Install fixed rows behind the gspread client. Usage: sheet_data(ventas=[...], gastos=[...])."""
+
+    def install(ventas=(), gastos=()):
+        spreadsheet = _RecordsSpreadsheet(list(ventas), list(gastos))
+
+        class Client:
+            def open_by_key(self, sheet_id):
+                return spreadsheet
+
+        monkeypatch.setattr(tools, "get_gspread_client", lambda: Client())
+
+    return install
+
+
+def test_resolve_month_defaults_to_today():
+    from datetime import datetime
+
+    now = datetime.now(tools.ARGENTINA)
+    assert _resolve_month(None, None) == (now.month, now.year)
+
+
+def test_resolve_month_rejects_out_of_range():
+    with pytest.raises(ValueError, match="entre 1 y 12"):
+        _resolve_month(13, 2026)
+
+
+def test_short_category_trims_parenthetical():
+    assert _short_category("Alimentación (comestibles, restaurantes)") == "Alimentación"
+    assert _short_category("Farmacia") == "Farmacia"
+
+
+def test_report_uses_the_requested_month_not_the_current_one(sheet_data):
+    sheet_data(
+        ventas=[_income_record("15/05/2026", 1000), _income_record("15/07/2026", 999)],
+        gastos=[_expense_record("20/05/2026", 400), _expense_record("20/07/2026", 111)],
+    )
+    msg = generate_monthly_report.invoke({"month": 5, "year": 2026})
+
+    assert "mayo 2026" in msg
+    assert "1,000.00" in msg
+    assert "400.00" in msg
+    assert "600.00" in msg  # balance
+    assert "999" not in msg  # July data must not leak in
+
+
+def test_report_without_args_uses_current_month(sheet_data):
+    from datetime import datetime
+
+    now = datetime.now(tools.ARGENTINA)
+    fecha = now.strftime("%d/%m/%Y")
+    sheet_data(ventas=[_income_record(fecha, 500)], gastos=[])
+    msg = generate_monthly_report.invoke({})
+
+    assert tools._month_label(now.month, now.year) in msg
+    assert "500.00" in msg
+
+
+def test_report_ignores_rows_from_unknown_users(sheet_data):
+    sheet_data(ventas=[_income_record("15/05/2026", 1000, usuario="intruso")], gastos=[])
+    msg = generate_monthly_report.invoke({"month": 5, "year": 2026})
+
+    assert "Ingresos: $0.00" in msg
+
+
+def test_report_returns_error_string_for_invalid_month(sheet_data):
+    sheet_data()
+    msg = generate_monthly_report.invoke({"month": 13, "year": 2026})
+
+    assert msg.startswith("Error generando reporte:")
+    assert "entre 1 y 12" in msg
+
+
+def test_spending_by_category_sorts_biggest_first(sheet_data):
+    sheet_data(
+        gastos=[
+            _expense_record("05/05/2026", 100, categoria="Farmacia", nota="ibuprofeno"),
+            _expense_record("10/05/2026", 900),
+        ]
+    )
+    msg = spending_by_category.invoke({"month": 5, "year": 2026})
+
+    assert "mayo 2026" in msg
+    assert msg.index("Alimentación:") < msg.index("Farmacia:")
+    assert "(90%)" in msg
+    assert "(10%)" in msg
+    assert "Total: $1,000.00" in msg
+
+
+def test_spending_by_category_reports_empty_month(sheet_data):
+    sheet_data(gastos=[_expense_record("10/05/2026", 900)])
+    msg = spending_by_category.invoke({"month": 1, "year": 2020})
+
+    assert msg == "No hay gastos registrados en enero 2020."
+
+
+def test_recent_transactions_newest_first_and_limited(sheet_data):
+    sheet_data(
+        ventas=[_income_record("01/06/2026", 500)],
+        gastos=[
+            _expense_record("10/06/2026", 300, nota="taxi"),
+            _expense_record("15/06/2026", 200, nota="pizza"),
+        ],
+    )
+    msg = list_recent_transactions.invoke({"limit": 2})
+    lines = msg.splitlines()
+
+    assert lines[0] == "Últimos 2 movimientos:"
+    assert "pizza" in lines[1]
+    assert "taxi" in lines[2]
+    assert "sueldo" not in msg  # third-newest, cut off by the limit
+
+
+def test_recent_transactions_mixes_incomes_and_expenses(sheet_data):
+    sheet_data(
+        ventas=[_income_record("20/06/2026", 500)],
+        gastos=[_expense_record("10/06/2026", 300, nota="taxi")],
+    )
+    msg = list_recent_transactions.invoke({})
+    lines = msg.splitlines()
+
+    assert "Ingreso" in lines[1]  # newest overall
+    assert "Gasto" in lines[2]
+
+
+def test_recent_transactions_with_no_rows(sheet_data):
+    sheet_data()
+    msg = list_recent_transactions.invoke({})
+
+    assert msg == "No hay movimientos registrados todavía."
+
+
+def test_recent_transactions_rejects_non_positive_limit(sheet_data):
+    sheet_data()
+    msg = list_recent_transactions.invoke({"limit": 0})
+
+    assert msg.startswith("Error listando movimientos:")
